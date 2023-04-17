@@ -1,3 +1,5 @@
 openai
-unstructured
-pinecone-client
+tiktoken
+chromadb
+langchain
+nest_asyncio
