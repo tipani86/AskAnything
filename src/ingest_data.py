@@ -4,6 +4,7 @@ import re
 import argparse
 import traceback
 import configparser
+from app_config import *
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.document_loaders.sitemap import SitemapLoader
@@ -94,7 +95,7 @@ def main(args: argparse.Namespace) -> dict:
     embedding = OpenAIEmbeddings()
 
     # Supplying a persist_directory will store the embeddings on disk
-    persist_directory = os.path.join(FILE_ROOT, "_chroma_db", args.site.replace(".", "_"))
+    persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
     vector_db = Chroma.from_documents(documents=all_texts, embedding=embedding, persist_directory=persist_directory)
 
     # Save the vector store
