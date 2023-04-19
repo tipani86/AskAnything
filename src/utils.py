@@ -30,7 +30,7 @@ async def call_post_api_async(
         except:
             if i == N_RETRIES - 1:
                 res['status'] = 2
-                res['message'] = f"API call failed after {N_RETRIES}: {traceback.format_exc()}"
+                res['message'] = f"API call failed after {N_RETRIES} tries: {traceback.format_exc()}"
                 return res
             else:
                 await asyncio.sleep(COOLDOWN + BACKOFF ** i)

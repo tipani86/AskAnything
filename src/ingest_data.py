@@ -4,6 +4,7 @@ import re
 import argparse
 import traceback
 import configparser
+from tqdm import tqdm
 from app_config import *
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
@@ -30,26 +31,32 @@ def main(args: argparse.Namespace) -> dict:
         site_section = site_config[args.site]
 
         index_url = site_section["index"]
-        filter_urls = site_section["filter_urls"].split(";")
-        filter_urls = [os.path.join(index_url.split("/sitemap.xml", 1)[0], x) for x in filter_urls]
+        url_filters = site_section["filter_urls"].split(";")
+        url_filters = [os.path.join(index_url.split("/sitemap.xml", 1)[0], x) for x in url_filters]
+        debug_url_filters = site_section["debug_filter_urls"].split(";")
+        debug_url_filters = [os.path.join(index_url.split("/sitemap.xml", 1)[0], x) for x in debug_url_filters]
         custom_separators = site_section["custom_separators"].split(";")
-        negative_text_filters = site_section["negative_text_filters"].split(";")
+        negative_text_page = site_section["negative_text_page"].split(";")
+        negative_text_chunk = site_section["negative_text_chunk"].split(";")
 
-        # Remove any escaped characters from the separators and negative text filters
-        for i in range(len(custom_separators)):
-            custom_separators[i] = custom_separators[i].replace("\\n", "\n").replace("\\r", "\r")
-
-        for i in range(len(negative_text_filters)):
-            negative_text_filters[i] = negative_text_filters[i].replace("\\n", "\n").replace("\\r", "\r")
+        # Remove any escaped characters from the separators and filters
+        for lst in [
+            custom_separators,
+            negative_text_page,
+            negative_text_chunk
+        ]:
+            for i in range(len(lst)):
+                lst[i] = lst[i].replace("\\n", "\n").replace("\\r", "\r")
 
         if args.debug:
             print(f"index_url = {index_url}")
-            print(f"filter_urls = {filter_urls}")
-            print("Replacing the filter_urls with one specific for debug purposes")
-            filter_urls = ["https://www.vero.fi/henkiloasiakkaat/verokortti-ja-veroilmoitus/vahennykset/tulonhankkimismenot/"]
-            print(f"Adjusted filter_urls = {filter_urls}")
+            print(f"url_filters = {url_filters}")
+            print("Replacing the url_filters with one specific for debug purposes")
+            url_filters = debug_url_filters
+            print(f"Adjusted url_filters = {url_filters}")
             print(f"custom_separators = {custom_separators}")
-            print(f"negative_text_filters = {negative_text_filters}")
+            print(f"negative_text_page = {negative_text_page}")
+            print(f"negative_text_chunk = {negative_text_chunk}")
 
     except:
         res["status"] = 2
@@ -59,7 +66,7 @@ def main(args: argparse.Namespace) -> dict:
     # Initialize all needed objects
 
     # Sitemap loader
-    loader = SitemapLoader(index_url, filter_urls)
+    loader = SitemapLoader(index_url, url_filters)
 
     # Text splitter
     text_splitter = RecursiveCharacterTextSplitter(
@@ -74,14 +81,19 @@ def main(args: argparse.Namespace) -> dict:
         return res
 
     all_texts = []
-    for doc in docs:
+    post_filter_docs = 0
+    for doc in tqdm(docs, desc="Filtering documents", ascii=True):
+        # Skip entire page if it contains any negative_text_page items
+        if any([re.search(filter, doc.page_content) for filter in negative_text_page]):
+            continue
+
         # Split the document page_content into text chunks based on the custom separators using re
         chunks = re.split("|".join(custom_separators), doc.page_content)
 
         # Perform sanity check on any negative filters, then reduce any length of \n to a single \n in each chunk
         final_chunks = []
         for chunk in chunks:
-            if not any([re.search(filter, chunk) for filter in negative_text_filters]):
+            if not any([re.search(filter, chunk) for filter in negative_text_chunk]):
                 final_chunks.append(re.sub("\n+", "\n", chunk))
 
         # Copy the doc.metadata into a list of metadata the length of chunks list
@@ -90,6 +102,12 @@ def main(args: argparse.Namespace) -> dict:
         texts = text_splitter.create_documents(final_chunks, metadatas)
         for text in texts:
             all_texts.append(text)
+
+        # Increase number of documents that passed the filter
+        post_filter_docs += 1
+
+    print(f"Number of documents after filtering: {post_filter_docs}")
+    print(f"Number of text chunks after filtering: {len(all_texts)}")
 
     # Embedding model
     embedding = OpenAIEmbeddings()

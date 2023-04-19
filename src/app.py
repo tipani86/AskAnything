@@ -1,11 +1,14 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import base64
+import tarfile
 import aiohttp
 import asyncio
 import argparse
 import traceback
+import configparser
 from utils import *
+from PIL import Image
 import streamlit as st
 from app_config import *
 from langchain.vectorstores import Chroma
@@ -14,7 +17,10 @@ from langchain.embeddings.openai import OpenAIEmbeddings
 FILE_ROOT = os.path.abspath(os.path.dirname(__file__))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--site", type=str, required=True, help="The site to load (section name in cfg file)")
+parser.add_argument("--site", type=str, default=None, help="The site to load (section name in cfg file)")
+parser.add_argument("--config", type=str, help="Path to configuration file", default="cfg/default.cfg")
+
+# Sanity check inputs
 
 try:
     args = parser.parse_args()
@@ -25,9 +31,24 @@ except SystemExit as e:
     print(f"Error parsing command line arguments: {traceback.format_exc()}")
     os._exit(e.code)
 
+config_fn = os.path.join(FILE_ROOT, args.config)
+if not os.path.exists(config_fn):
+    st.error(f"Config file not found: {config_fn}")
+    st.stop()
 
-### FUNCTION DEFINITIONS ###
 
+### CACHED FUNCTION DEFINITIONS ###
+
+@st.cache_data(show_spinner=False)
+def get_config(file_path: str) -> configparser.ConfigParser:
+    config = configparser.ConfigParser()
+    config.read(file_path)
+    return config
+
+@st.cache_data(show_spinner=False)
+def get_favicon(file_path: str):
+    # Load a byte image and return its favicon
+    return Image.open(file_path)
 
 @st.cache_data(show_spinner=False)
 def get_css() -> str:
@@ -35,11 +56,69 @@ def get_css() -> str:
     with open(os.path.join(FILE_ROOT, "style.css"), "r") as f:
         return f"<style>{f.read()}</style>"
 
-
 @st.cache_data(show_spinner=False)
 def get_local_img(file_path: str) -> str:
     # Load a byte image and return its base64 encoded string
     return base64.b64encode(open(file_path, "rb").read()).decode("utf-8")
+
+@st.cache_resource(show_spinner=False)
+def get_vector_db(file_path: str) -> Chroma:
+    if not os.path.isdir(file_path):
+        # Check whether the file of same name but .tar.gz extension exists, if so, extract it
+        tarball_fn = file_path.rstrip("/") + ".tar.gz"
+        if not os.path.isfile(tarball_fn):
+            st.error(f"Vector database not found: {file_path}")
+            st.stop()
+
+        with tarfile.open(tarball_fn, "r:gz") as tar:
+            tar.extractall(path=os.path.dirname(file_path))
+
+    embeddings = OpenAIEmbeddings()
+    return Chroma(persist_directory=file_path, embedding_function=embeddings)
+
+
+
+# Get query parameters
+query_params = st.experimental_get_query_params()
+if "debug" in query_params and query_params["debug"][0].lower() == "true":
+    st.session_state.DEBUG = True
+
+if "DEBUG" in st.session_state and st.session_state.DEBUG:
+    DEBUG = True
+
+if "site" in query_params:
+    args.site = query_params["site"][0].lower()
+
+if args.site is None:
+    st.error("No site specified!")
+    st.stop()
+
+# Load the config file
+
+config = get_config(config_fn)
+
+try:
+    section = config[args.site]
+    ICON_FN=section["icon_fn"]
+    BROWSER_TITLE=section["browser_title"]
+    MAIN_TITLE=section["main_title"]
+    SUBHEADER=section["subheader"]
+    USER_PROMPT=section["user_prompt"]
+    FOOTER_HTML=section["footer_html"]
+
+except:
+    st.error(f"Error reading config file {config_fn}: {traceback.format_exc()}")
+    st.stop()
+
+# Initialize a Streamlit UI with custom title and favicon
+favicon = get_favicon(os.path.join(FILE_ROOT, "assets", ICON_FN))
+st.set_page_config(
+    page_title=BROWSER_TITLE,
+    page_icon=favicon,
+)
+
+
+### OTHER FUNCTION DEFINITIONS ###
 
 
 def get_chat_message(
@@ -49,7 +128,7 @@ def get_chat_message(
     # Formats the message in an chat fashion (user right, reply left)
     div_class = "AI-line"
     color = "rgb(240, 242, 246)"
-    file_path = os.path.join(FILE_ROOT, "assets", "AI_icon.png")
+    file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
     src = f"data:image/gif;base64,{get_local_img(file_path)}"
     if align == "right":
         div_class = "human-line"
@@ -75,7 +154,7 @@ async def main(human_prompt: str) -> dict:
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;")
 
-        # Update both chat log and the model memory
+        # Update chat log
         st.session_state.LOG.append(f"Human: {human_prompt}")
 
         # Clear the input box after human_prompt is used
@@ -96,12 +175,21 @@ async def main(human_prompt: str) -> dict:
             writing_animation.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;<img src='data:image/gif;base64,{get_local_img(file_path)}' width=30 height=10>", unsafe_allow_html=True)
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(human_prompt)
+            if len(st.session_state.LOG) > 2:
+                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "\n" + human_prompt
+            docs = vector_db.max_marginal_relevance_search(human_prompt)
+
+            if DEBUG:
+                with st.sidebar:
+                    st.subheader("Prompt")
+                    st.markdown(human_prompt)
+                    st.subheader("Reference materials")
+                    st.json(docs, expanded=False)
 
             messages = [
                 {'role': "system", 'content': INITIAL_PROMPT}
             ] + [
-                {'role': "system", 'content': f"{x.page_content}\n\n({x.metadata['source']})"} for x in docs
+                {'role': "system", 'content': f"{x.page_content}\n\n({x.metadata['source'].rstrip('/')})"} for x in docs
             ] + [
                 {'role': "user", 'content': human_prompt}
             ]
@@ -116,7 +204,7 @@ async def main(human_prompt: str) -> dict:
 
                 if DEBUG:
                     with st.sidebar:
-                        st.write("chatbot_res")
+                        st.subheader("chatbot_res")
                         st.json(chatbot_res, expanded=False)
 
                 if chatbot_res['status'] != 0:
@@ -147,14 +235,9 @@ async def main(human_prompt: str) -> dict:
 ### MAIN APP STARTS HERE ###
 
 
-# Create a wide Streamlit UI and a custom title
-st.set_page_config(
-    page_title=f"Kysy karhulta",
-)
-
 # Define main layout
-st.title(f"Moi, olen karhu. Verokarhu.")
-st.subheader("Kysy minulta mitä tahansa verotukseen liittyvästä!")
+st.title(MAIN_TITLE)
+st.subheader(SUBHEADER)
 st.subheader("")
 chat_box = st.container()
 st.write("")
@@ -166,14 +249,11 @@ st.markdown(get_css(), unsafe_allow_html=True)
 
 # Load the vector database
 persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
+with st.spinner("Loading vector database..."):
+    vector_db = get_vector_db(persist_directory)
 
-if not os.path.exists(persist_directory):
-    st.error(f"Vector database not found at {persist_directory}")
-    st.stop()
-
-embeddings = OpenAIEmbeddings()
-vector_db = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
-
+with footer:
+    st.markdown(FOOTER_HTML, unsafe_allow_html=True)
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
 
@@ -195,7 +275,7 @@ with chat_box:
 
 # Define an input box for human prompts
 with prompt_box:
-    human_prompt = st.text_input("Kysymyksesi:", value="", key=f"text_input_{len(st.session_state.LOG)}")
+    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{len(st.session_state.LOG)}")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
 if len(human_prompt) > 0:
