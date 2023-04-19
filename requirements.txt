@@ -1,0 +1,6 @@
+openai
+aiohttp
+tiktoken
+chromadb
+langchain
+nest_asyncio
