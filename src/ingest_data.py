@@ -98,7 +98,7 @@ def main(args: argparse.Namespace) -> dict:
             if not any([re.search(filter, chunk) for filter in negative_text_chunk]):
                 chunk = re.sub("\n+", "\n", chunk)
                 # Filter by minimum length, or else too short and uninformative
-                if len(chunk) > min_chunk_length:
+                if len(chunk.strip()) >= min_chunk_length:
                     final_chunks.append(chunk)
 
         # Copy the doc.metadata into a list of metadata the length of chunks list
