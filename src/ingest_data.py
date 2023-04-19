@@ -31,13 +31,14 @@ def main(args: argparse.Namespace) -> dict:
         site_section = site_config[args.site]
 
         index_url = site_section["index"]
-        url_filters = site_section["filter_urls"].split(";")
+        url_filters = site_section["url_filters"].split(";")
         url_filters = [os.path.join(index_url.split("/sitemap.xml", 1)[0], x) for x in url_filters]
-        debug_url_filters = site_section["debug_filter_urls"].split(";")
+        debug_url_filters = site_section["debug_url_filters"].split(";")
         debug_url_filters = [os.path.join(index_url.split("/sitemap.xml", 1)[0], x) for x in debug_url_filters]
         custom_separators = site_section["custom_separators"].split(";")
         negative_text_page = site_section["negative_text_page"].split(";")
         negative_text_chunk = site_section["negative_text_chunk"].split(";")
+        min_chunk_length = int(site_section["min_chunk_length"])
 
         # Remove any escaped characters from the separators and filters
         for lst in [
@@ -57,6 +58,7 @@ def main(args: argparse.Namespace) -> dict:
             print(f"custom_separators = {custom_separators}")
             print(f"negative_text_page = {negative_text_page}")
             print(f"negative_text_chunk = {negative_text_chunk}")
+            print(f"min_chunk_length = {min_chunk_length}")
 
     except:
         res["status"] = 2
@@ -94,7 +96,10 @@ def main(args: argparse.Namespace) -> dict:
         final_chunks = []
         for chunk in chunks:
             if not any([re.search(filter, chunk) for filter in negative_text_chunk]):
-                final_chunks.append(re.sub("\n+", "\n", chunk))
+                chunk = re.sub("\n+", "\n", chunk)
+                # Filter by minimum length, or else too short and uninformative
+                if len(chunk) > min_chunk_length:
+                    final_chunks.append(chunk)
 
         # Copy the doc.metadata into a list of metadata the length of chunks list
         metadatas = [doc.metadata] * len(final_chunks)
@@ -113,7 +118,7 @@ def main(args: argparse.Namespace) -> dict:
     embedding = OpenAIEmbeddings()
 
     # Supplying a persist_directory will store the embeddings on disk
-    persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
+    persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_")).rstrip("/")
     vector_db = Chroma.from_documents(documents=all_texts, embedding=embedding, persist_directory=persist_directory)
 
     # Save the vector store
@@ -123,6 +128,15 @@ def main(args: argparse.Namespace) -> dict:
     except:
         res["status"] = 2
         res["message"] = f"Error persisting vector store: {traceback.format_exc()}"
+        return res
+
+    # Compress the vector store into a tar.gz file of the same name
+    tar_cmd = f"tar -czvf {persist_directory}.tar.gz -C {os.path.dirname(persist_directory)} {os.path.basename(persist_directory)}"
+    try:
+        os.system(tar_cmd)
+    except:
+        res["status"] = 2
+        res["message"] = f"Error compressing vector store: {traceback.format_exc()}"
         return res
 
     return res
