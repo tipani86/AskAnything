@@ -1,5 +1,6 @@
 openai
 aiohttp
+requests
 tiktoken
 chromadb
 langchain
