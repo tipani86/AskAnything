@@ -157,6 +157,7 @@ async def main(human_prompt: str) -> dict:
         if len(human_prompt) < 20:
             res['status'] = 1
             res['message'] = "Please enter a longer prompt."
+            return res
 
         # Update chat log
         st.session_state.LOG.append(f"Human: {human_prompt}")
