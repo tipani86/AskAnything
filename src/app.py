@@ -73,6 +73,8 @@ def get_vector_db(file_path: str) -> Chroma:
             # Download it from CHROMA_DB_URL
             try:
                 logger.info(f"Downloading vector database from {CHROMA_DB_URL}...")
+                if not os.path.exists(os.path.dirname(tarball_fn)):
+                    os.makedirs(os.path.dirname(tarball_fn), exist_ok=True)
                 for i in range(N_RETRIES):
                     try:
                         r = requests.get(CHROMA_DB_URL, allow_redirects=True, timeout=TIMEOUT)
