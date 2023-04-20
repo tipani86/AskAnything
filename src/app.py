@@ -285,6 +285,7 @@ with st.spinner("Loading vector database..."):
 
 with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
+    st.write("")
     st.info(f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is often busy, leading to long response times. The current timeout for the API request is {TIMEOUT} seconds/try, with {N_RETRIES} retries.", icon="ℹ️")
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
