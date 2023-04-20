@@ -1,10 +1,12 @@
 # App to load the vector database and let users to ask questions from it
 import os
+import time
 import base64
 import tarfile
 import aiohttp
 import asyncio
 import argparse
+import requests
 import traceback
 import configparser
 from utils import *
@@ -67,8 +69,28 @@ def get_vector_db(file_path: str) -> Chroma:
         # Check whether the file of same name but .tar.gz extension exists, if so, extract it
         tarball_fn = file_path.rstrip("/") + ".tar.gz"
         if not os.path.isfile(tarball_fn):
-            st.error(f"Vector database not found: {file_path}")
-            st.stop()
+            # Download it from CHROMA_DB_URL
+            try:
+                print(f"Downloading vector database from {CHROMA_DB_URL}...")
+                for i in range(N_RETRIES):
+                    try:
+                        r = requests.get(CHROMA_DB_URL, allow_redirects=True, timeout=TIMEOUT)
+                        if r.status_code != 200:
+                            raise Exception(f"HTTP error {r.status_code}: {r.text}")
+                        with open(tarball_fn, "wb") as f:
+                            f.write(r.content)
+                        print(f"Saved vector database to {tarball_fn}")
+                        time.sleep(COOLDOWN)
+                        break
+                    except:
+                        if i == N_RETRIES - 1:
+                            raise
+                        print(f"Error downloading vector database: {traceback.format_exc()}")
+                        print(f"Retrying in {COOLDOWN * BACKOFF ** i} seconds...")
+                        time.sleep(COOLDOWN * BACKOFF ** i)
+            except:
+                st.error(f"Error downloading vector database: {traceback.format_exc()}")
+                st.stop()
 
         with tarfile.open(tarball_fn, "r:gz") as tar:
             tar.extractall(path=os.path.dirname(file_path))
@@ -100,12 +122,13 @@ config = get_config(config_fn)
 try:
     section = config[args.site]
     INITIAL_PROMPT = section["initial_prompt"]
-    ICON_FN=section["icon_fn"]
-    BROWSER_TITLE=section["browser_title"]
-    MAIN_TITLE=section["main_title"]
-    SUBHEADER=section["subheader"]
-    USER_PROMPT=section["user_prompt"]
-    FOOTER_HTML=section["footer_html"]
+    ICON_FN = section["icon_fn"]
+    BROWSER_TITLE = section["browser_title"]
+    MAIN_TITLE = section["main_title"]
+    SUBHEADER = section["subheader"]
+    USER_PROMPT = section["user_prompt"]
+    FOOTER_HTML = section["footer_html"]
+    CHROMA_DB_URL = section["chroma_db_url"]
 except:
     st.error(f"Error reading config file {config_fn}: {traceback.format_exc()}")
     st.stop()
