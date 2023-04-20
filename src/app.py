@@ -181,7 +181,7 @@ async def main(human_prompt: str) -> dict:
 
             # Perform vector-store lookup of the human prompt
             if len(st.session_state.LOG) > 2:
-                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n----------  \n" + human_prompt
+                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n" + human_prompt
             docs = vector_db.similarity_search(human_prompt)
 
             if DEBUG:
@@ -192,11 +192,11 @@ async def main(human_prompt: str) -> dict:
                     st.json(docs, expanded=False)
 
             messages = [
-                {'role': "system", 'content': INITIAL_PROMPT}
+                {'role': "user", 'content': INITIAL_PROMPT}
             ] + [
-                {'role': "system", 'content': f"{x.page_content}\n\n({x.metadata['source'].rstrip('/')})"} for x in docs
+                {'role': "user", 'content': f"Datapoint: {x.page_content}\n\n({x.metadata['source'].rstrip('/')})"} for x in docs
             ] + [
-                {'role': "user", 'content': human_prompt}
+                {'role': "user", 'content': f"Question: {human_prompt}"}
             ]
 
             async with aiohttp.ClientSession() as httpclient:
