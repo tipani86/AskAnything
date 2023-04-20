@@ -196,7 +196,7 @@ async def main(human_prompt: str) -> dict:
             ] + [
                 {'role': "user", 'content': f"Datapoint: {x.page_content}\n\n({x.metadata['source'].rstrip('/')})"} for x in docs
             ] + [
-                {'role': "user", 'content': f"Question: {human_prompt}"}
+                {'role': "user", 'content': human_prompt}
             ]
 
             async with aiohttp.ClientSession() as httpclient:
