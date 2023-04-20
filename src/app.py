@@ -13,6 +13,7 @@ from utils import *
 from PIL import Image
 import streamlit as st
 from app_config import *
+from loguru import logger
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
 
@@ -30,7 +31,7 @@ except SystemExit as e:
     # This exception will be raised if --help or invalid command line arguments
     # are used. Currently streamlit prevents the program from exiting normally
     # so we have to do a hard exit.
-    print(f"Error parsing command line arguments: {traceback.format_exc()}")
+    logger.error(f"Error parsing command line arguments: {traceback.format_exc()}")
     os._exit(e.code)
 
 config_fn = os.path.join(FILE_ROOT, args.config)
@@ -71,7 +72,7 @@ def get_vector_db(file_path: str) -> Chroma:
         if not os.path.isfile(tarball_fn):
             # Download it from CHROMA_DB_URL
             try:
-                print(f"Downloading vector database from {CHROMA_DB_URL}...")
+                logger.info(f"Downloading vector database from {CHROMA_DB_URL}...")
                 for i in range(N_RETRIES):
                     try:
                         r = requests.get(CHROMA_DB_URL, allow_redirects=True, timeout=TIMEOUT)
@@ -79,14 +80,14 @@ def get_vector_db(file_path: str) -> Chroma:
                             raise Exception(f"HTTP error {r.status_code}: {r.text}")
                         with open(tarball_fn, "wb") as f:
                             f.write(r.content)
-                        print(f"Saved vector database to {tarball_fn}")
+                        logger.info(f"Saved vector database to {tarball_fn}")
                         time.sleep(COOLDOWN)
                         break
                     except:
                         if i == N_RETRIES - 1:
                             raise
-                        print(f"Error downloading vector database: {traceback.format_exc()}")
-                        print(f"Retrying in {COOLDOWN * BACKOFF ** i} seconds...")
+                        logger.warning(f"Error downloading vector database: {traceback.format_exc()}")
+                        logger.info(f"Retrying in {COOLDOWN * BACKOFF ** i} seconds...")
                         time.sleep(COOLDOWN * BACKOFF ** i)
             except:
                 st.error(f"Error downloading vector database: {traceback.format_exc()}")
