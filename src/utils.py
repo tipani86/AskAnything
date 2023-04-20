@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 from app_config import *
+from loguru import logger
 
 
 async def call_post_api_async(
@@ -23,20 +24,28 @@ async def call_post_api_async(
                 else:
                     if i == N_RETRIES - 1:
                         res['status'] = 2
-                        res['message'] = f"API returned status code {response.status} and message {await response.text()} after {N_RETRIES} retries."
+                        msg = f"API returned status code {response.status} and message {await response.text()} after {N_RETRIES} retries."
+                        logger.error(msg)
+                        res['message'] = msg
                         return res
                     else:
+                        logger.warning(f"API returned status code {response.status} and message {await response.text()}. Retrying...")
                         await asyncio.sleep(COOLDOWN + BACKOFF ** i)
         except:
             if i == N_RETRIES - 1:
                 res['status'] = 2
-                res['message'] = f"API call failed after {N_RETRIES} tries: {traceback.format_exc()}"
+                msg = f"API call failed after {N_RETRIES} tries: {traceback.format_exc()}"
+                logger.error(msg)
+                res['message'] = msg
                 return res
             else:
+                logger.warning(f"API call failed: {traceback.format_exc()}. Retrying...")
                 await asyncio.sleep(COOLDOWN + BACKOFF ** i)
 
     res['status'] = 2
-    res['message'] = f"Failed to call API after {N_RETRIES} retries."
+    msg = f"Failed to call API after {N_RETRIES} retries."
+    logger.error(msg)
+    res['message'] = msg
     return res
 
 
