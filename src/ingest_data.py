@@ -96,17 +96,16 @@ def main(args: argparse.Namespace) -> dict:
         final_chunks = []
         for chunk in chunks:
             if not any([re.search(filter, chunk) for filter in negative_text_chunk]):
-                chunk = re.sub("\n+", "\n", chunk)
-                # Filter by minimum length, or else too short and uninformative
-                if len(chunk) > min_chunk_length:
-                    final_chunks.append(chunk)
+                final_chunks.append(re.sub("\n+", "\n", chunk))
 
         # Copy the doc.metadata into a list of metadata the length of chunks list
         metadatas = [doc.metadata] * len(final_chunks)
 
         texts = text_splitter.create_documents(final_chunks, metadatas)
         for text in texts:
-            all_texts.append(text)
+            # Filter by minimum length, or else too short and uninformative
+            if len(text.page_content.strip()) >= min_chunk_length:
+                all_texts.append(text)
 
         # Increase number of documents that passed the filter
         post_filter_docs += 1
