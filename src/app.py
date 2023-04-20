@@ -154,6 +154,10 @@ async def main(human_prompt: str) -> dict:
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;")
 
+        if len(human_prompt) < 20:
+            res['status'] = 1
+            res['message'] = "Please enter a longer prompt."
+
         # Update chat log
         st.session_state.LOG.append(f"Human: {human_prompt}")
 
@@ -176,8 +180,8 @@ async def main(human_prompt: str) -> dict:
 
             # Perform vector-store lookup of the human prompt
             if len(st.session_state.LOG) > 2:
-                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "\n" + human_prompt
-            docs = vector_db.max_marginal_relevance_search(human_prompt)
+                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n----------  \n" + human_prompt
+            docs = vector_db.similarity_search(human_prompt)
 
             if DEBUG:
                 with st.sidebar:
@@ -285,7 +289,10 @@ if len(human_prompt) > 0:
 
     else:
         if run_res['status'] != 0:
-            st.error(run_res['message'])
+            if run_res['status'] == 1:
+                st.warning(run_res['message'])
+            else:
+                st.error(run_res['message'])
         with prompt_box:
             if st.button("Show text input field"):
                 st.experimental_rerun()
