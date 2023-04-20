@@ -99,13 +99,13 @@ config = get_config(config_fn)
 
 try:
     section = config[args.site]
+    INITIAL_PROMPT = section["initial_prompt"]
     ICON_FN=section["icon_fn"]
     BROWSER_TITLE=section["browser_title"]
     MAIN_TITLE=section["main_title"]
     SUBHEADER=section["subheader"]
     USER_PROMPT=section["user_prompt"]
     FOOTER_HTML=section["footer_html"]
-
 except:
     st.error(f"Error reading config file {config_fn}: {traceback.format_exc()}")
     st.stop()
