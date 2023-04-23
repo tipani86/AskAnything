@@ -14,6 +14,7 @@ from PIL import Image
 import streamlit as st
 from app_config import *
 from loguru import logger
+import streamlit.components.v1 as components
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
 
@@ -48,10 +49,12 @@ def get_config(file_path: str) -> configparser.ConfigParser:
     config.read(file_path)
     return config
 
+
 @st.cache_data(show_spinner=False)
 def get_favicon(file_path: str):
     # Load a byte image and return its favicon
     return Image.open(file_path)
+
 
 @st.cache_data(show_spinner=False)
 def get_css() -> str:
@@ -59,10 +62,21 @@ def get_css() -> str:
     with open(os.path.join(FILE_ROOT, "style.css"), "r") as f:
         return f"<style>{f.read()}</style>"
 
+
+@st.cache_data(show_spinner=False)
+def get_js() -> str:
+    # Read javascript web trackers code from script.js file
+    with open(os.path.join(FILE_ROOT, "script.js"), "r") as f:
+        return f"""
+            <script type='text/javascript'>{f.read()}</script>
+        """
+
+
 @st.cache_data(show_spinner=False)
 def get_local_img(file_path: str) -> str:
     # Load a byte image and return its base64 encoded string
     return base64.b64encode(open(file_path, "rb").read()).decode("utf-8")
+
 
 @st.cache_resource(show_spinner=False)
 def get_vector_db(file_path: str) -> Chroma:
@@ -100,7 +114,6 @@ def get_vector_db(file_path: str) -> Chroma:
 
     embeddings = OpenAIEmbeddings()
     return Chroma(persist_directory=file_path, embedding_function=embeddings)
-
 
 
 # Get query parameters
@@ -278,6 +291,9 @@ footer = st.container()
 # Load CSS code
 st.markdown(get_css(), unsafe_allow_html=True)
 
+# Load JS code
+components.html(get_js(), height=0, width=0)
+
 # Load the vector database
 persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
 with st.spinner("Loading vector database..."):
@@ -286,7 +302,9 @@ with st.spinner("Loading vector database..."):
 with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
     st.write("")
-    st.info(f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is often busy, **leading to long response times**, so please wait patiently. The current timeout for the API request is {TIMEOUT} seconds/try, with {N_RETRIES} retries.", icon="ℹ️")
+    st.info(
+        f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is often busy, **leading to long response times**, so please wait patiently. The current timeout for the API request is {TIMEOUT} seconds/try, with {N_RETRIES} retries.",
+        icon="ℹ️")
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
 
