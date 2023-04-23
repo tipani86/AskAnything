@@ -1,12 +1,8 @@
-// Find and hide an element in the parent frame from within the child frame, if the parent frame and the element exist, of course
+// Get access to parent of parent
+var grandParent = parent.parent;
 
-const streamlitDoc = window.parent.document
-if (streamlitDoc.parent) {
-    const targetElement = streamlitDoc.parent.document.querySelector('.viewerBadge_container__1QSob');
+// Select target element using class name
+var targetElement = grandParent.querySelector('.viewerBadge_container__1QSob');
 
-    console.log(targetElement)
-
-    if (targetElement) {
-        targetElement.style.display = 'none';
-    }
-}
+// Hide selected element by setting display property to none
+targetElement.style.display = 'none';
