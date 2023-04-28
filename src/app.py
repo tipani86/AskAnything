@@ -16,7 +16,9 @@ from app_config import *
 from loguru import logger
 import streamlit.components.v1 as components
 from langchain.vectorstores import Chroma
+from langchain.chat_models import ChatOpenAI
 from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 
 FILE_ROOT = os.path.abspath(os.path.dirname(__file__))
 
@@ -63,13 +65,13 @@ def get_css() -> str:
         return f"<style>{f.read()}</style>"
 
 
-@st.cache_data(show_spinner=False)
-def get_js() -> str:
-    # Read javascript web trackers code from script.js file
-    with open(os.path.join(FILE_ROOT, "script.js"), "r") as f:
-        return f"""
-            <script type='text/javascript'>{f.read()}</script>
-        """
+# @st.cache_data(show_spinner=False)
+# def get_js() -> str:
+#     # Read javascript web trackers code from script.js file
+#     with open(os.path.join(FILE_ROOT, "script.js"), "r") as f:
+#         return f"""
+#             <script type='text/javascript'>{f.read()}</script>
+#         """
 
 
 @st.cache_data(show_spinner=False)
@@ -114,7 +116,6 @@ def get_vector_db(file_path: str) -> Chroma:
 
     embeddings = OpenAIEmbeddings()
     return Chroma(persist_directory=file_path, embedding_function=embeddings)
-
 
 # Get query parameters
 query_params = st.experimental_get_query_params()
@@ -218,10 +219,11 @@ async def main(human_prompt: str) -> dict:
             file_path = os.path.join(FILE_ROOT, "assets", "loading.gif")
             writing_animation.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;<img src='data:image/gif;base64,{get_local_img(file_path)}' width=30 height=10>", unsafe_allow_html=True)
 
+            # if len(st.session_state.LOG) > 2:
+            #     human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n" + human_prompt
+
             # Perform vector-store lookup of the human prompt
-            if len(st.session_state.LOG) > 2:
-                human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n" + human_prompt
-            docs = vector_db.similarity_search(human_prompt)
+            docs = vector_db.similarity_search(human_prompt, )
 
             if DEBUG:
                 with st.sidebar:
@@ -230,13 +232,31 @@ async def main(human_prompt: str) -> dict:
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
+
+            # chain = load_qa_with_sources_chain(ChatOpenAI(model_name=NLP_MODEL_NAME), chain_type="refine")
+            # chatbot_res = chain(
+            #     {'input_documents': docs, 'question': human_prompt},
+            #     return_only_outputs=True
+            # )
+
+            contents = "\n###\n".join([f"Content: {x.page_content}\n\nSource: {x.metadata['source'].rstrip('/')}" for x in docs])
+
+            prompt = f"""
+            {INITIAL_PROMPT}
+            #### Contents ####
+            {contents}
+            #### Question ####
+            {human_prompt}
+            """
+
             messages = [
-                {'role': "user", 'content': INITIAL_PROMPT}
-            ] + [
-                {'role': "user", 'content': f"Datapoint: {x.page_content}\n\n({x.metadata['source'].rstrip('/')})"} for x in docs
-            ] + [
-                {'role': "user", 'content': human_prompt}
+                {'role': "user", 'content': prompt}
             ]
+
+            if DEBUG:
+                with st.sidebar:
+                    st.subheader("Query")
+                    st.json(messages, expanded=False)
 
             async with aiohttp.ClientSession() as httpclient:
                 # Call the OpenAI ChatGPT API for final result
@@ -246,20 +266,36 @@ async def main(human_prompt: str) -> dict:
                     os.getenv("OPENAI_API_KEY")
                 )
 
-                if DEBUG:
-                    with st.sidebar:
-                        st.subheader("chatbot_res")
-                        st.json(chatbot_res, expanded=False)
+            if DEBUG:
+                with st.sidebar:
+                    st.subheader("chatbot_res")
+                    st.json(chatbot_res, expanded=False)
 
+            if 'status' in chatbot_res:
                 if chatbot_res['status'] != 0:
                     res['status'] = chatbot_res['status']
                     res['message'] = chatbot_res['message']
                     return res
 
-            reply_text = chatbot_res['data']
+                reply_text = chatbot_res['data']
+            else:
+                reply_text = chatbot_res['output_text']
+
 
             if reply_text.startswith("AI: "):
                 reply_text = reply_text.split("AI: ", 1)[1]
+
+            sources = []
+            if "SOURCES: " in reply_text:
+                reply_text, sources = reply_text.split("SOURCES: ", 1)
+                sources = sources.split(",")
+            
+            if len(sources) > 0:
+                for i, source in enumerate(sources):
+                    if len(source.strip()) == 0:
+                        continue
+                    html = f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
+                    reply_text += f" {html}"
 
             # Render the reply as chat reply
             reply_box.markdown(get_chat_message(reply_text), unsafe_allow_html=True)
@@ -291,8 +327,8 @@ footer = st.container()
 # Load CSS code
 st.markdown(get_css(), unsafe_allow_html=True)
 
-# Load JS code
-components.html(get_js(), height=0, width=0)
+# # Load JS code
+# components.html(get_js(), height=0, width=0)
 
 # Load the vector database
 persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
