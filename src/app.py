@@ -1,15 +1,14 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import time
+import openai
 import base64
 import tarfile
-import aiohttp
 import asyncio
 import argparse
 import requests
 import traceback
 import configparser
-from utils import *
 from PIL import Image
 import streamlit as st
 from app_config import *
@@ -219,6 +218,7 @@ async def main(human_prompt: str) -> dict:
             file_path = os.path.join(FILE_ROOT, "assets", "loading.gif")
             writing_animation.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;<img src='data:image/gif;base64,{get_local_img(file_path)}' width=30 height=10>", unsafe_allow_html=True)
 
+            # # Load the previous response along with the new question
             # if len(st.session_state.LOG) > 2:
             #     human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n" + human_prompt
 
@@ -258,32 +258,28 @@ async def main(human_prompt: str) -> dict:
                     st.subheader("Query")
                     st.json(messages, expanded=False)
 
-            async with aiohttp.ClientSession() as httpclient:
-                # Call the OpenAI ChatGPT API for final result
-                chatbot_res = await get_chatbot_reply_data_async(
-                    httpclient,
-                    messages,
-                    os.getenv("OPENAI_API_KEY")
-                )
+            # Call the OpenAI ChatGPT API for final result
+            reply_text = ""
+            async for chunk in await openai.ChatCompletion.acreate(
+                model=NLP_MODEL_NAME,
+                messages=messages,
+                max_tokens=NLP_MODEL_REPLY_MAX_TOKENS,
+                stop=NLP_MODEL_STOP_WORDS,
+                stream=True,
+                timeout=TIMEOUT,
+            ):
+                content = chunk["choices"][0].get("delta", {}).get("content", None)
+                if content is not None:
+                    reply_text += content
 
-            if DEBUG:
-                with st.sidebar:
-                    st.subheader("chatbot_res")
-                    st.json(chatbot_res, expanded=False)
+                    # Sanitizing output
+                    if reply_text.startswith("AI: "):
+                        reply_text = reply_text.split("AI: ", 1)[1]
 
-            if 'status' in chatbot_res:
-                if chatbot_res['status'] != 0:
-                    res['status'] = chatbot_res['status']
-                    res['message'] = chatbot_res['message']
-                    return res
+                    # Continuously render the reply as it comes in
+                    reply_box.markdown(get_chat_message(reply_text), unsafe_allow_html=True)
 
-                reply_text = chatbot_res['data']
-            else:
-                reply_text = chatbot_res['output_text']
-
-
-            if reply_text.startswith("AI: "):
-                reply_text = reply_text.split("AI: ", 1)[1]
+            # Final fixing
 
             sources = []
             if "SOURCES: " in reply_text:
@@ -297,7 +293,7 @@ async def main(human_prompt: str) -> dict:
                     html = f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
                     reply_text += f" {html}"
 
-            # Render the reply as chat reply
+            # Render the final reply form once
             reply_box.markdown(get_chat_message(reply_text), unsafe_allow_html=True)
 
             # Clear the writing animation
@@ -339,7 +335,7 @@ with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
     st.write("")
     st.info(
-        f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is often busy, **leading to long response times**, so please wait patiently. The current timeout for the API request is {TIMEOUT} seconds/try, with {N_RETRIES} retries.",
+        f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is often busy, **leading to long response times**, so please wait patiently. The current timeout for the API request is {TIMEOUT} seconds.",
         icon="ℹ️")
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
