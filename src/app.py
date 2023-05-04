@@ -335,7 +335,7 @@ with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
     st.write("")
     st.info(
-        f"Note: This app uses OpenAI's GPT-4 API under the hood. Due to high demand, the API is sometimes busy, **leading to long response times**, so please wait patiently if the response doesn't begin immediately.",
+        f"Note: This app uses OpenAI's GPT-4 under the hood. Due to high demand, the service is sometimes busy, **leading to long response times**, so please wait patiently if the reply doesn't begin immediately.",
         icon="ℹ️")
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
