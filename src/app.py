@@ -194,11 +194,6 @@ async def main(human_prompt: str) -> dict:
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;")
 
-        if len(human_prompt) < 15:
-            res['status'] = 1
-            res['message'] = "Please enter a longer prompt."
-            return res
-
         # Update chat log
         st.session_state.LOG.append(f"Human: {human_prompt}")
 
@@ -359,7 +354,7 @@ with chat_box:
 
 # Define an input box for human prompts
 with prompt_box:
-    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{str(uuid.uuid4())}")
+    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{len(st.session_state.LOG)}")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
 if len(human_prompt) > 0:
