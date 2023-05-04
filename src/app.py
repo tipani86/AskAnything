@@ -1,6 +1,7 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import time
+import uuid
 import openai
 import base64
 import tarfile
@@ -193,7 +194,7 @@ async def main(human_prompt: str) -> dict:
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;")
 
-        if len(human_prompt) < 20:
+        if len(human_prompt) < 15:
             res['status'] = 1
             res['message'] = "Please enter a longer prompt."
             return res
@@ -335,7 +336,7 @@ with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
     st.write("")
     st.info(
-        f"Note: This app uses OpenAI's GPT-4 under the hood. Due to high demand, the service is sometimes busy, **leading to long response times**, so please wait patiently if the reply doesn't begin immediately.",
+        f"Note: This app uses OpenAI's GPT-4 under the hood. The service may sometimes be busy, so please wait patiently if the reply doesn't begin immediately.",
         icon="ℹ️")
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
@@ -358,7 +359,7 @@ with chat_box:
 
 # Define an input box for human prompts
 with prompt_box:
-    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{len(st.session_state.LOG)}")
+    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{str(uuid.uuid4())}")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
 if len(human_prompt) > 0:
