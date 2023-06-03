@@ -330,20 +330,19 @@ with chat_box:
 
 # Define an input box for human prompts
 with prompt_box:
-    human_prompt = st.text_input(USER_PROMPT, value="", key=f"text_input_{len(st.session_state.LOG)}")
+    with st.form(key="Text input", clear_on_submit=True)
+        human_prompt = st.text_input(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.LOG)}")
+        submitted = st.form_submit_button(label="Send")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
-if len(human_prompt) > 0:
+if submitted and len(human_prompt) > 0:
     run_res = asyncio.run(main(human_prompt))
     if run_res['status'] == 0 and not DEBUG:
         st.experimental_rerun()
-
     else:
         if run_res['status'] != 0:
-            if run_res['status'] == 1:
-                st.warning(run_res['message'])
-            else:
-                st.error(run_res['message'])
+            st.error(run_res['message'])
         with prompt_box:
             if st.button("Show text input field"):
                 st.experimental_rerun()
+
