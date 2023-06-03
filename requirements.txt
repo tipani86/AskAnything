@@ -1,6 +1,9 @@
+bs4
+lxml
 openai
 loguru
 aiohttp
+openpyxl
 requests
 tiktoken
 chromadb

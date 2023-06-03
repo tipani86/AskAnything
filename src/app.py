@@ -1,7 +1,6 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import time
-import uuid
 import openai
 import base64
 import tarfile
@@ -14,17 +13,13 @@ from PIL import Image
 import streamlit as st
 from app_config import *
 from loguru import logger
-import streamlit.components.v1 as components
 from langchain.vectorstores import Chroma
-from langchain.chat_models import ChatOpenAI
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 
 FILE_ROOT = os.path.abspath(os.path.dirname(__file__))
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--site", type=str, default=None, help="The site to load (section name in cfg file)")
-parser.add_argument("--config", type=str, help="Path to configuration file", default="cfg/default.cfg")
+parser.add_argument("--config", type=str, default=None, help="Path to configuration file")
 
 # Sanity check inputs
 
@@ -36,11 +31,6 @@ except SystemExit as e:
     # so we have to do a hard exit.
     logger.error(f"Error parsing command line arguments: {traceback.format_exc()}")
     os._exit(e.code)
-
-config_fn = os.path.join(FILE_ROOT, args.config)
-if not os.path.exists(config_fn):
-    st.error(f"Config file not found: {config_fn}")
-    st.stop()
 
 
 ### CACHED FUNCTION DEFINITIONS ###
@@ -126,26 +116,36 @@ if "DEBUG" in st.session_state and st.session_state.DEBUG:
     DEBUG = True
 
 if "site" in query_params:
-    args.site = query_params["site"][0].lower()
+    args.config = f"""cfg/{query_params["site"][0].lower()}.cfg"""
 
-if args.site is None:
+if args.config is None:
     st.error("No site specified!")
     st.stop()
 
 # Load the config file
 
-config = get_config(config_fn)
+config_fn = os.path.join(FILE_ROOT, args.config)
+if not os.path.exists(config_fn):
+    st.error(f"Config file not found: {config_fn}")
+    st.stop()
+
+config_basename, _ = os.path.splitext(os.path.basename(config_fn))
+config = configparser.ConfigParser()
+config.read(config_fn)
 
 try:
-    section = config[args.site]
-    INITIAL_PROMPT = section["initial_prompt"]
-    ICON_FN = section["icon_fn"]
-    BROWSER_TITLE = section["browser_title"]
-    MAIN_TITLE = section["main_title"]
-    SUBHEADER = section["subheader"]
-    USER_PROMPT = section["user_prompt"]
-    FOOTER_HTML = section["footer_html"]
-    CHROMA_DB_URL = section["chroma_db_url"]
+    for section_name in config.sections():
+        if section_name != "DEFAULT":
+            section = config[section_name]
+            INITIAL_PROMPT = section["initial_prompt"]
+            ICON_FN = section["icon_fn"]
+            BROWSER_TITLE = section["browser_title"]
+            MAIN_TITLE = section["main_title"]
+            SUBHEADER = section["subheader"]
+            USER_PROMPT = section["user_prompt"]
+            FOOTER_HTML = section["footer_html"]
+            CHROMA_DB_URL = section["chroma_db_url"]
+            break
 except:
     st.error(f"Error reading config file {config_fn}: {traceback.format_exc()}")
     st.stop()
@@ -214,10 +214,6 @@ async def main(human_prompt: str) -> dict:
             file_path = os.path.join(FILE_ROOT, "assets", "loading.gif")
             writing_animation.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;<img src='data:image/gif;base64,{get_local_img(file_path)}' width=30 height=10>", unsafe_allow_html=True)
 
-            # # Load the previous response along with the new question
-            # if len(st.session_state.LOG) > 2:
-            #     human_prompt = st.session_state.LOG[-2].split("AI: ", 1)[1] + "  \n" + human_prompt
-
             # Perform vector-store lookup of the human prompt
             docs = vector_db.similarity_search(human_prompt, )
 
@@ -227,13 +223,6 @@ async def main(human_prompt: str) -> dict:
                     st.markdown(human_prompt)
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
-
-
-            # chain = load_qa_with_sources_chain(ChatOpenAI(model_name=NLP_MODEL_NAME), chain_type="refine")
-            # chatbot_res = chain(
-            #     {'input_documents': docs, 'question': human_prompt},
-            #     return_only_outputs=True
-            # )
 
             contents = "\n###\n".join([f"Content: {x.page_content}\n\nSource: {x.metadata['source'].rstrip('/')}" for x in docs])
 
@@ -260,6 +249,7 @@ async def main(human_prompt: str) -> dict:
                 model=NLP_MODEL_NAME,
                 messages=messages,
                 max_tokens=NLP_MODEL_REPLY_MAX_TOKENS,
+                temperature=0,
                 stop=NLP_MODEL_STOP_WORDS,
                 stream=True,
                 timeout=TIMEOUT,
@@ -323,7 +313,7 @@ st.markdown(get_css(), unsafe_allow_html=True)
 # components.html(get_js(), height=0, width=0)
 
 # Load the vector database
-persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, args.site.replace(".", "_"))
+persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, config_basename.replace(".", "_"))
 with st.spinner("Loading vector database..."):
     vector_db = get_vector_db(persist_directory)
 
