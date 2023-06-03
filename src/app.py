@@ -153,29 +153,34 @@ st.set_page_config(
 
 
 def get_chat_message(
-    contents: str = "",
-    align: str = "left"
-) -> str:
-    # Formats the message in an chat fashion (user right, reply left)
-    div_class = "AI-line"
-    color = "rgb(240, 242, 246)"
-    file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
-    src = f"data:image/gif;base64,{get_local_img(file_path)}"
-    if align == "right":
-        div_class = "human-line"
-        color = "rgb(165, 239, 127)"
-        file_path = os.path.join(FILE_ROOT, "assets", "user_icon.png")
+    line: str,
+    loading: bool = False,
+    loading_fp: str = os.path.join(FILE_ROOT, "assets", "loading.gif")
+) -> None:
+    # Formats the message in an basic chat fashion
+    image_container, contents_container = st.columns([1, 11], gap="small")
+
+    if line.startswith("AI: "):
+        contents = line.split("AI: ", 1)[1]
+        file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
         src = f"data:image/gif;base64,{get_local_img(file_path)}"
-    icon_code = f"<img class='chat-icon' src='{src}' width=32 height=32 alt='avatar'>"
-    formatted_contents = f"""
-    <div class="{div_class}">
-        {icon_code}
-        <div class="chat-bubble" style="background: {color};">
-        <p>{contents}
-        </div>
-    </div>
-    """
-    return formatted_contents
+    elif line.startswith("Human: "):
+        contents = line.split("Human: ", 1)[1]
+        file_path = os.path.join(FILE_ROOT, "assets", "user_icon.png")
+        image_data = get_local_img(file_path)
+        src = f"data:image/gif;base64,{image_data}"
+    else:
+        st.error(f"Unknown message type: {line}")
+        st.stop()
+
+    with image_container:
+        st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
+
+    with contents_container:
+        st.markdown(contents)
+        if loading:
+            st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
+
 
 
 async def main(human_prompt: str) -> dict:
@@ -183,7 +188,7 @@ async def main(human_prompt: str) -> dict:
     try:
 
         # Strip the prompt of any potentially harmful html/js injections
-        human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;")
+        human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;").strip()
 
         # Update chat log
         st.session_state.LOG.append(f"Human: {human_prompt}")
@@ -193,17 +198,16 @@ async def main(human_prompt: str) -> dict:
 
         with chat_box:
             # Write the latest human message first
+            if len(st.session_state.LOG) > 1:
+                st.divider()
+            
             line = st.session_state.LOG[-1]
-            contents = line.split("Human: ")[1]
-            st.markdown(get_chat_message(contents, align="right"), unsafe_allow_html=True)
+            get_chat_message(line)
+            st.divider()
 
             reply_box = st.empty()
-            reply_box.markdown(get_chat_message(), unsafe_allow_html=True)
-
-            # This is one of those small three-dot animations to indicate the bot is "writing"
-            writing_animation = st.empty()
-            file_path = os.path.join(FILE_ROOT, "assets", "loading.gif")
-            writing_animation.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;<img src='data:image/gif;base64,{get_local_img(file_path)}' width=30 height=10>", unsafe_allow_html=True)
+            with reply_box:
+                get_chat_message("AI: ", loading=True)
 
             # Perform vector-store lookup of the human prompt
             docs = vector_db.similarity_search(human_prompt, )
@@ -235,7 +239,7 @@ async def main(human_prompt: str) -> dict:
                     st.json(messages, expanded=False)
 
             # Call the OpenAI ChatGPT API for final result
-            reply_text = ""
+            reply_text = "AI: "
             async for chunk in await openai.ChatCompletion.acreate(
                 model=NLP_MODEL_NAME,
                 messages=messages,
@@ -249,14 +253,16 @@ async def main(human_prompt: str) -> dict:
                 if content is not None:
                     reply_text += content
 
-                    # Sanitizing output
-                    if reply_text.startswith("AI: "):
-                        reply_text = reply_text.split("AI: ", 1)[1]
-
                     # Continuously render the reply as it comes in
-                    reply_box.markdown(get_chat_message(reply_text), unsafe_allow_html=True)
+                    with reply_box:
+                        get_chat_message(reply_text)
 
             # Final fixing
+
+            # Sanitizing output
+            reply_text = reply_text.strip()
+            if reply_text.startswith("AI: "):
+                reply_text = reply_text.split("AI: ", 1)[1]
 
             sources = []
             if "SOURCES: " in reply_text:
@@ -269,12 +275,6 @@ async def main(human_prompt: str) -> dict:
                         continue
                     html = f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
                     reply_text += f" {html}"
-
-            # Render the final reply form once
-            reply_box.markdown(get_chat_message(reply_text), unsafe_allow_html=True)
-
-            # Clear the writing animation
-            writing_animation.empty()
 
             # Update the chat log
             st.session_state.LOG.append(f"AI: {reply_text}")
@@ -322,16 +322,11 @@ if "LOG" not in st.session_state:
 
 # Render chat history so far
 with chat_box:
-    for line in st.session_state.LOG:
-        # For AI response
-        if line.startswith("AI: "):
-            contents = line.split("AI: ")[1]
-            st.markdown(get_chat_message(contents), unsafe_allow_html=True)
-
-        # For human prompts
-        if line.startswith("Human: "):
-            contents = line.split("Human: ")[1]
-            st.markdown(get_chat_message(contents, align="right"), unsafe_allow_html=True)
+    for i, line in enumerate(st.session_state.LOG):
+        get_chat_message(line)
+        # Add a divider between messages unless it's the last message
+        if i < len(st.session_state.LOG) - 1:
+            st.divider()
 
 # Define an input box for human prompts
 with prompt_box:
