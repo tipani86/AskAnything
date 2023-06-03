@@ -24,6 +24,15 @@ footer {
     padding-bottom: 0rem;
 }
 
+p:first-child {
+    margin: 0px;
+}
+
+p {
+    margin: 0px;
+    margin-top: 1rem;
+}
+
 .human-line {
     display: flex;
     font-family: "Source Sans Pro", sans-serif, "Segoe UI", "Roboto", sans-serif;
