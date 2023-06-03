@@ -330,7 +330,7 @@ with chat_box:
 
 # Define an input box for human prompts
 with prompt_box:
-    with st.form(key="Text input", clear_on_submit=True)
+    with st.form(key="Text input", clear_on_submit=True):
         human_prompt = st.text_input(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.LOG)}")
         submitted = st.form_submit_button(label="Send")
 
