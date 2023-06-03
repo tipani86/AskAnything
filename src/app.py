@@ -155,20 +155,25 @@ st.set_page_config(
 def get_chat_message(
     line: str,
     loading: bool = False,
-    loading_fp: str = os.path.join(FILE_ROOT, "assets", "loading.gif")
+    loading_fp: str = os.path.join(FILE_ROOT, "assets", "loading.gif"),
+    streaming: bool = False,
 ) -> None:
     # Formats the message in an basic chat fashion
     image_container, contents_container = st.columns([1, 11], gap="small")
 
+    sources = ""
+
     if line.startswith("AI: "):
         contents = line.split("AI: ", 1)[1]
+        if "SOURCES: " in contents:
+            contents, sources = contents.split("SOURCES: ", 1)
         file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
         src = f"data:image/gif;base64,{get_local_img(file_path)}"
     elif line.startswith("Human: "):
         contents = line.split("Human: ", 1)[1]
         file_path = os.path.join(FILE_ROOT, "assets", "user_icon.png")
         image_data = get_local_img(file_path)
-        src = f"data:image/gif;base64,{image_data}"
+        src = f"data:image/gif;base64,{image_data}"       
     else:
         st.error(f"Unknown message type: {line}")
         st.stop()
@@ -178,6 +183,19 @@ def get_chat_message(
 
     with contents_container:
         st.markdown(contents)
+        if len(sources) > 0:
+            if streaming:
+                pass
+            else:
+                sources = sources.split(",")
+                if len(sources) > 0:
+                    html = ""
+                    for i, source in enumerate(sources):
+                        if len(source.strip()) == 0:
+                            continue
+                        html += f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
+                    if len(html) > 0:
+                        st.markdown(html, unsafe_allow_html=True)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
@@ -255,7 +273,7 @@ async def main(human_prompt: str) -> dict:
 
                     # Continuously render the reply as it comes in
                     with reply_box:
-                        get_chat_message(reply_text)
+                        get_chat_message(reply_text, streaming=True)
 
             # Final fixing
 
@@ -264,19 +282,6 @@ async def main(human_prompt: str) -> dict:
             if reply_text.startswith("AI: "):
                 reply_text = reply_text.split("AI: ", 1)[1]
 
-            sources = []
-            if "SOURCES: " in reply_text:
-                reply_text, sources = reply_text.split("SOURCES: ", 1)
-                sources = sources.split(",")
-            
-            if len(sources) > 0:
-                for i, source in enumerate(sources):
-                    if len(source.strip()) == 0:
-                        continue
-                    html = f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
-                    reply_text += f" {html}"
-
-            # Update the chat log
             st.session_state.LOG.append(f"AI: {reply_text}")
 
     except:
