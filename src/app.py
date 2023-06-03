@@ -53,16 +53,7 @@ def get_css() -> str:
     # Read CSS code from style.css file
     with open(os.path.join(FILE_ROOT, "style.css"), "r") as f:
         return f"<style>{f.read()}</style>"
-
-
-# @st.cache_data(show_spinner=False)
-# def get_js() -> str:
-#     # Read javascript web trackers code from script.js file
-#     with open(os.path.join(FILE_ROOT, "script.js"), "r") as f:
-#         return f"""
-#             <script type='text/javascript'>{f.read()}</script>
-#         """
-
+    
 
 @st.cache_data(show_spinner=False)
 def get_local_img(file_path: str) -> str:
@@ -180,7 +171,7 @@ def get_chat_message(
     <div class="{div_class}">
         {icon_code}
         <div class="chat-bubble" style="background: {color};">
-        &#8203;{contents}
+        <p>{contents}
         </div>
     </div>
     """
