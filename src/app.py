@@ -161,8 +161,12 @@ def get_chat_message(
     # Formats the message in an basic chat fashion
     image_container, contents_container = st.columns([1, 11], gap="small")
 
+    sources = ""
+
     if line.startswith("AI: "):
         contents = line.split("AI: ", 1)[1]
+        if "SOURCES: " in contents:
+            contents, sources = contents.split("SOURCES: ", 1)
         file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
         src = f"data:image/gif;base64,{get_local_img(file_path)}"
     elif line.startswith("Human: "):
@@ -178,9 +182,8 @@ def get_chat_message(
         st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
 
     with contents_container:
-        if "SOURCES: " in contents:
-            contents, sources = contents.split("SOURCES: ", 1)
-            st.markdown(contents)
+        st.markdown(contents)
+        if len(sources) > 0:
             if streaming:
                 pass
             else:
@@ -193,8 +196,6 @@ def get_chat_message(
                         html += f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
                     if len(html) > 0:
                         st.markdown(html, unsafe_allow_html=True)
-        else:
-            st.markdown(contents)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
