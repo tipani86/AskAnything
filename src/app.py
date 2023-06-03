@@ -143,7 +143,7 @@ try:
             MAIN_TITLE = section["main_title"]
             SUBHEADER = section["subheader"]
             USER_PROMPT = section["user_prompt"]
-            FOOTER_HTML = section["footer_html"]
+            FOOTER_HTML = section.get("footer_html", "")
             CHROMA_DB_URL = section["chroma_db_url"]
             break
 except:
