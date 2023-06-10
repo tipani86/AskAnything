@@ -244,12 +244,12 @@ async def main(human_prompt: str) -> dict:
                     processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
                 elif "url" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
-                contents.append(doc.page_content)
+                contents.append(processed_contents)
             contents = "\n##\n".join(contents)
 
             prompt = f"""
             {INITIAL_PROMPT}
-            #### Contents ####
+            #### Documents ####
             {contents}
             #### Question ####
             {human_prompt}
