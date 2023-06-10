@@ -237,7 +237,15 @@ async def main(human_prompt: str) -> dict:
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
-            contents = "\n###\n".join([f"Content: {x.page_content}\n\nSource: {x.metadata['source'].rstrip('/')}" for x in docs])
+            contents = []
+            for doc in docs:
+                processed_contents = f"Content: {doc.page_content}"
+                if "source" in doc.metadata:
+                    processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
+                elif "url" in doc.metadata:
+                    processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
+                contents.append(doc.page_content)
+            contents = "\n##\n".join(contents)
 
             prompt = f"""
             {INITIAL_PROMPT}
