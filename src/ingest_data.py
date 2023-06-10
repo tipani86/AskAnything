@@ -6,34 +6,39 @@ import traceback
 import configparser
 import pandas as pd
 from tqdm import tqdm
+from typing import List
+from pathlib import Path
 from app_config import *
 from loguru import logger
 from langchain.vectorstores import Chroma
+from langchain.docstore.document import Document
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.document_loaders.sitemap import SitemapLoader
+from langchain.document_loaders.url import UnstructuredURLLoader
 from langchain.document_loaders import DataFrameLoader, PDFMinerLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-FILE_ROOT = os.path.abspath(os.path.dirname(__file__))
-chunk_size = 2000
-chunk_overlap = 200
+FILE_ROOT = Path(__file__).parent.parent
+chunk_size = 200
+chunk_overlap = 20
 
-def main(args: argparse.Namespace) -> dict:
-    res = {"status": 0, "message": "Success"}
+def main(args: argparse.Namespace) -> tuple[int, str]:
+    status = 0
+    message = "Success"
     if args.dry_run:
         logger.warning("Dry run mode enabled! (No vectorization or database save)")
     if args.debug:
         logger.warning("Debug mode enabled! (Depending on the config, the behavior may change)")
 
     # Sanity check inputs
-    config_fn = os.path.join(FILE_ROOT, args.config)
-    if not os.path.exists(config_fn):
-        res["status"] = 2
-        res["message"] = f"Config file {config_fn} does not exist"
-        return res
+    config_fn = FILE_ROOT / args.config
+    if not config_fn.exists():
+        status = 2
+        message = f"Config file {config_fn} does not exist"
+        return status, message
 
     # Load the config file
-    config_basename, _ = os.path.splitext(os.path.basename(config_fn))
+    config_basename = config_fn.stem
     config = configparser.ConfigParser()
     config.read(config_fn)
 
@@ -75,9 +80,9 @@ def main(args: argparse.Namespace) -> dict:
                 logger.debug(f"min_chunk_length = {min_chunk_length}")
 
         except:
-            res["status"] = 2
-            res["message"] = f"Error reading config file {config_fn}: {traceback.format_exc()}"
-            return res
+            status = 2
+            message = f"Error reading config file {config_fn}: {traceback.format_exc()}"
+            return status, message
 
         # Initialize all needed objects
 
@@ -91,9 +96,9 @@ def main(args: argparse.Namespace) -> dict:
         try:
             docs = loader.load()
         except:
-            res["status"] = 2
-            res["message"] = f"Error loading sitemap {index_url}: {traceback.format_exc()}"
-            return res
+            status = 2
+            message = f"Error loading sitemap {index_url}: {traceback.format_exc()}"
+            return status, message
 
         post_filter_docs = 0
         for doc in tqdm(docs, desc="Filtering documents", ascii=True):
@@ -126,6 +131,7 @@ def main(args: argparse.Namespace) -> dict:
         logger.info(f"Number of text chunks after filtering: {len(all_texts)}")
 
 
+    # TODO very much in-progress, not production-ready
     if "excel" in config.sections():
         section = config["excel"]
         input_fn = section["input_fn"]
@@ -136,15 +142,15 @@ def main(args: argparse.Namespace) -> dict:
 
         all_texts = docs
 
-
+    # TODO: Try unstructured method to get page numbers etc.
     if "pdf" in config.sections():
         try:
             section = config["pdf"]
             input_fn = section["input_fn"]
         except:
-            res["status"] = 2
-            res["message"] = f"Error reading config file {config_fn}: {traceback.format_exc()}"
-            return res
+            status = 2
+            message = f"Error reading config file {config_fn}: {traceback.format_exc()}"
+            return status, message
         
         if args.debug:
             logger.debug(f"Config type: {section}")
@@ -162,9 +168,9 @@ def main(args: argparse.Namespace) -> dict:
         try:
             docs = loader.load()
         except:
-            res["status"] = 2
-            res["message"] = f"Error loading PDF {input_fn}: {traceback.format_exc()}"
-            return res
+            status = 2
+            message = f"Error loading PDF {input_fn}: {traceback.format_exc()}" 
+            return status, message
         
         # Save the input file's basename as the docs metadata source
         for doc in docs:
@@ -181,35 +187,105 @@ def main(args: argparse.Namespace) -> dict:
         logger.info(f"Number of documents: {len(docs)}")
         logger.info(f"Number of text chunks: {len(all_texts)}")
 
+    if "site_excel" in config.sections():
+        try:
+            section = config["pdf"]
+            input_fn = section["input_fn"]
+        except:
+            status = 2
+            message = f"Error reading config file {config_fn}: {traceback.format_exc()}"
+            return status, message
+
+        # Load the excel files into a dataframe
+        df = pd.read_excel(input_fn, engine="openpyxl")
+
+        # Group the dataframe by site column
+        grps = df.groupby('site')
+
+        all_texts = []
+        for site, gdf in grps:
+            logger.info(f"Processing site {site}...")
+
+            # Get site-specific configs
+            try:
+                site_config = config[site]
+            except:
+                status = 2
+                message = f"Error searching {site} in config file {config_fn}: {traceback.format_exc()}"
+                return status, message
+
+            start_after = site_config.get("start_after", "")
+            stop_after = site_config.get("stop_after", "")
+
+            urls = gdf['url'].tolist()
+            loader = UnstructuredURLLoader(urls, mode="elements", headers={"User-Agent": "Mozilla/5.0"})
+            docs = loader.load()
+
+            # Create a url to document text lookup dict
+            url_doc_contents_map = {}
+            for doc in docs:
+                # Skip all non-text document parts
+                if doc.metadata["category"] != "Title":
+                    continue
+                url = doc.metadata["url"]
+                if url not in url_doc_contents_map:
+                    url_doc_contents_map[url] = []
+                url_doc_contents_map[url].append(doc.page_content)
+
+            # Post-process the documents and add the results to the final_documents list
+            for url, texts in url_doc_contents_map.items():
+                # Make a single text chunk from the entire document by joining each text element with a paragraph break
+                joined_text = "\n\n".join(texts)
+
+                # If keyword argument start_after is set, cut off any text up to the first occurrence of the keyword
+                if "start_after" in kwargs:
+                    start_after = kwargs["start_after"]
+                    if len(start_after) > 0:
+                        joined_text = joined_text.split(start_after, 1)[-1]
+
+                # If keyword argument stop_after is set, cut off any text after the first occurrence of the keyword
+                if "stop_after" in kwargs:
+                    stop_after = kwargs["stop_after"]
+                    if len(stop_after) > 0:
+                        joined_text = joined_text.split(stop_after, 1)[0]
+
+                # Use text splitter to split the text into sentences
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap,
+                )
+                split_texts = text_splitter.split_text(joined_text)
+
+                # Create a document for each split text
+                metadatas = [{"url": url}] * len(split_texts)
+                final_documents.extend(text_splitter.create_documents(split_texts, metadatas))
+
+        logger.info(f"Generated {len(all_texts)} text chunks from {len(df)} urls")
+
     # Supplying a persist_directory will store the embeddings on disk
-    persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, config_basename.replace(".", "_")).rstrip("/")
+    persist_directory = str(FILE_ROOT / CHROMA_DB_DIR / config_basename.replace(".", "_")).rstrip("/")
     if args.debug:
         logger.debug(f"persist_directory = {persist_directory}")
-    if not args.dry_run:
-        # Embedding model
-        embedding = OpenAIEmbeddings()
-
-        vector_db = Chroma.from_documents(documents=all_texts, embedding=embedding, persist_directory=persist_directory)
-
-        # Save the vector store
-        try:
-            vector_db.persist()
-            vector_db = None
-        except:
-            res["status"] = 2
-            res["message"] = f"Error persisting vector store: {traceback.format_exc()}"
-            return res
-
-        # Compress the vector store into a tar.gz file of the same name
-        tar_cmd = f"tar -czvf {persist_directory}.tar.gz -C {os.path.dirname(persist_directory)} {os.path.basename(persist_directory)}"
-        try:
-            os.system(tar_cmd)
-        except:
-            res["status"] = 2
-            res["message"] = f"Error compressing vector store: {traceback.format_exc()}"
-            return res
-    else:
+    if args.dry_run:
         logger.warning("Stopping processing due to dry_run mode!")
+        return status, message
+    
+    # Embedding model
+    embedding = OpenAIEmbeddings()
+
+    vector_db = Chroma.from_documents(documents=all_texts, embedding=embedding, persist_directory=persist_directory)
+
+    # Save the vector store
+    try:
+        vector_db.persist()
+        vector_db = None
+    except:
+        res["status"] = 2
+        res["message"] = f"Error persisting vector store: {traceback.format_exc()}"
+        return res
+
+    # Compress the vector store into a tar.gz file of the same name
+    tar_cmd = f"tar -czvf {persist_directory}.tar.gz -C {os.path.dirname(persist_directory)} {os.path.basename(persist_directory)}"
 
     return res
 
