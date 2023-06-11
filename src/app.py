@@ -237,7 +237,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
             if len(st.session_state.MESSAGES) > 1:
                 # Summarize chat history so far
                 history_str = "Please summarize the key topics and contents of the below conversation， in the same language as the conversation:\n\n"
-                for message in st.session_state.MESSAGES[-1:]:
+                for message in st.session_state.MESSAGES[:-1]:
                     if message["role"] == "assistant":
                         history_str += "AI: "
                     elif message["role"] == "user":
