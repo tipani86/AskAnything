@@ -232,6 +232,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     "content": ""
                 }, loading=True)
 
+            search_prompt = human_prompt
             if len(st.session_state.SHORT_TERM_CONTEXT) > 1:
                 # Check whether short term context needs to be reset
                 history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history ###\n\n"
