@@ -249,7 +249,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                         st.subheader("History_str")
                         st.markdown(history_str)
                         
-                # Call GPT-3.5-Turbo model to summarize the conversation
+                # Call GPT-3.5-Turbo model to determine if topic changed
                 call_res = await openai.ChatCompletion.acreate(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "system", "content": history_str}],
@@ -261,7 +261,8 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 if DEBUG:
                     with st.sidebar:
                         st.subheader("Same topic?")
-                        st.markdown(same_topic, expanded=False)
+                        st.markdown(same_topic)
+
                 if same_topic.lower() == "false":
                     st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
                     search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]["content"]
