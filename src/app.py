@@ -242,7 +242,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                         history_str += "AI: "
                     elif message["role"] == "user":
                         history_str += "Human: "
-                    history_str += message["content"] + "\n"
+                    history_str += message["content"] + "\n\nSummary:"
 
                 if DEBUG:
                     with st.sidebar:
