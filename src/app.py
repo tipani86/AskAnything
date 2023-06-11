@@ -247,7 +247,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 # Call GPT-3.5-Turbo model to summarize the conversation
                 call_res = await openai.ChatCompletion.acreate(
                     model="gpt-3.5-turbo",
-                    messages=history_str,
+                    messages=[{"role": "system", "content": history_str}],
                     max_tokens=500,
                     temperature=0,
                     stop=NLP_MODEL_STOP_WORDS,
@@ -259,7 +259,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 human_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(human_prompt, )
+            docs = vector_db.similarity_search(human_prompt)
 
             if DEBUG:
                 with st.sidebar:
