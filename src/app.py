@@ -153,7 +153,7 @@ st.set_page_config(
 
 
 def get_chat_message(
-    line: str,
+    message: dict[str, str],
     loading: bool = False,
     loading_fp: str = FILE_ROOT / "assets" / "loading.gif",
     streaming: bool = False,
@@ -163,20 +163,20 @@ def get_chat_message(
 
     sources = ""
 
-    if line.startswith("AI: "):
-        contents = line.split("AI: ", 1)[1]
+    role = message["role"]
+    contents = message["content"]
+    if role == "assistant":
         if "SOURCES: " in contents:
             contents, sources = contents.split("SOURCES: ", 1)
         file_path = FILE_ROOT / "assets" / ICON_FN
         src = f"data:image/gif;base64,{get_local_img(file_path)}"
-    elif line.startswith("Human: "):
-        contents = line.split("Human: ", 1)[1]
+    elif role == "user":
         file_path = FILE_ROOT / "assets" / "user_icon.png"
         image_data = get_local_img(file_path)
         src = f"data:image/gif;base64,{image_data}"       
     else:
-        st.error(f"Unknown message type: {line}")
-        st.stop()
+        # Not a message that needs to be rendered (for example, system message)
+        return
 
     with image_container:
         st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
@@ -201,39 +201,82 @@ def get_chat_message(
 
 
 
-async def main(human_prompt: str) -> dict:
-    res = {'status': 0, 'message': "Success"}
+async def main(human_prompt: str) -> tuple[int, str]:
+    res_status = 0
+    res_message = "Success"
     try:
-
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;").strip()
-
+        
         # Update chat log
-        st.session_state.LOG.append(f"Human: {human_prompt}")
+        message = {"role": "user", "content": human_prompt}
+        st.session_state.MESSAGES.append(message)
+        st.session_state.SHORT_TERM_CONTEXT.append(message)
 
         # Clear the input box after human_prompt is used
         prompt_box.empty()
 
         with chat_box:
             # Write the latest human message first
-            if len(st.session_state.LOG) > 1:
+            if len(st.session_state.MESSAGES) > 1:
                 st.divider()
             
-            line = st.session_state.LOG[-1]
-            get_chat_message(line)
+            message = st.session_state.MESSAGES[-1]
+            get_chat_message(message)
             st.divider()
 
             reply_box = st.empty()
             with reply_box:
-                get_chat_message("AI: ", loading=True)
+                get_chat_message({
+                    "role": "assistant",
+                    "content": ""
+                }, loading=True)
+
+            search_prompt = human_prompt
+            if len(st.session_state.SHORT_TERM_CONTEXT) > 1:
+                # Check whether short term context needs to be reset
+                history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history ###\n\n"
+                for message in st.session_state.SHORT_TERM_CONTEXT[:-1]:
+                    if message["role"] == "assistant":
+                        history_str += "AI: "
+                    elif message["role"] == "user":
+                        history_str += "Human: "
+                    history_str += message["content"] + "\n\n"
+                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]['content']} ### Reply True if all messages are still about the same topic. Reply False if the latest question switched topics. Only reply True or False, and nothing else."
+
+                if DEBUG:
+                    with st.sidebar:
+                        st.subheader("History_str")
+                        st.markdown(history_str)
+                        
+                # Call GPT-3.5-Turbo model to determine if topic changed
+                call_res = await openai.ChatCompletion.acreate(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "system", "content": history_str}],
+                    max_tokens=10,
+                    temperature=0,
+                    timeout=TIMEOUT,
+                )
+                same_topic = call_res["choices"][0]["message"]["content"].strip()
+                if DEBUG:
+                    with st.sidebar:
+                        st.subheader("Same topic?")
+                        st.markdown(same_topic)
+
+                if same_topic.lower() == "false":
+                    st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
+                    search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]["content"]
+                else:
+                    # Either topic did not change or could not be determined, assume not changed
+                    search_prompt = history_str.split("###")[1]
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(human_prompt, )
+            docs = vector_db.similarity_search(search_prompt)
 
             if DEBUG:
                 with st.sidebar:
-                    st.subheader("Prompt")
-                    st.markdown(human_prompt)
+                    st.subheader("Search prompt")
+                    st.markdown(search_prompt)
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
@@ -247,16 +290,15 @@ async def main(human_prompt: str) -> dict:
                 contents.append(processed_contents)
             contents = "\n##\n".join(contents)
 
-            prompt = f"""
-            {INITIAL_PROMPT}
-            #### Documents ####
-            {contents}
-            #### Question ####
-            {human_prompt}
-            """
+            prompt = f"""#### Instructions ####
+{INITIAL_PROMPT}
+#### Documents ####
+{contents}
+#### Chat Context ####
+{search_prompt}"""
 
             messages = [
-                {'role': "user", 'content': prompt}
+                {"role": "system", "content": prompt}
             ]
 
             if DEBUG:
@@ -265,7 +307,7 @@ async def main(human_prompt: str) -> dict:
                     st.json(messages, expanded=False)
 
             # Call the OpenAI ChatGPT API for final result
-            reply_text = "AI: "
+            reply_text = ""
             async for chunk in await openai.ChatCompletion.acreate(
                 model=NLP_MODEL_NAME,
                 messages=messages,
@@ -281,7 +323,10 @@ async def main(human_prompt: str) -> dict:
 
                     # Continuously render the reply as it comes in
                     with reply_box:
-                        get_chat_message(reply_text, streaming=True)
+                        get_chat_message({
+                            "role": "assistant",
+                            "content": reply_text
+                        }, streaming=True)
 
             # Final fixing
 
@@ -290,13 +335,15 @@ async def main(human_prompt: str) -> dict:
             if reply_text.startswith("AI: "):
                 reply_text = reply_text.split("AI: ", 1)[1]
 
-            st.session_state.LOG.append(f"AI: {reply_text}")
+            reply_message = {"role": "assistant", "content": reply_text}
+            st.session_state.MESSAGES.append(reply_message)
+            st.session_state.SHORT_TERM_CONTEXT.append(reply_message)
 
     except:
-        res['status'] = 2
-        res['message'] = traceback.format_exc()
+        res_status = 2
+        res_message = traceback.format_exc()
 
-    return res
+    return res_status, res_message
 
 ### MAIN APP STARTS HERE ###
 
@@ -330,31 +377,32 @@ with footer:
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
 
-if "LOG" not in st.session_state:
-    st.session_state.LOG = []
+if "MESSAGES" not in st.session_state:
+    st.session_state.MESSAGES = []
+    st.session_state.SHORT_TERM_CONTEXT = []
 
 # Render chat history so far
 with chat_box:
-    for i, line in enumerate(st.session_state.LOG):
-        get_chat_message(line)
+    for i, message in enumerate(st.session_state.MESSAGES):
+        get_chat_message(message)
         # Add a divider between messages unless it's the last message
-        if i < len(st.session_state.LOG) - 1:
+        if i < len(st.session_state.MESSAGES) - 1:
             st.divider()
 
 # Define an input box for human prompts
 with prompt_box:
     with st.form(key="Text input", clear_on_submit=True):
-        human_prompt = st.text_input(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.LOG)}")
+        human_prompt = st.text_input(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.MESSAGES)}")
         submitted = st.form_submit_button(label="Send")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
 if submitted and len(human_prompt) > 0:
-    run_res = asyncio.run(main(human_prompt))
-    if run_res['status'] == 0 and not DEBUG:
+    status, message = asyncio.run(main(human_prompt))
+    if status == 0 and not DEBUG:
         st.experimental_rerun()
     else:
-        if run_res['status'] != 0:
-            st.error(run_res['message'])
+        if status != 0:
+            st.error(message)
         with prompt_box:
             if st.button("Show text input field"):
                 st.experimental_rerun()
