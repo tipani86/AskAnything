@@ -290,13 +290,12 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 contents.append(processed_contents)
             contents = "\n##\n".join(contents)
 
-            prompt = f"""{summary}
-#### Instructions ####
+            prompt = f"""#### Instructions ####
 {INITIAL_PROMPT}
 #### Documents ####
 {contents}
-#### Question ####
-{summary_prompt}"""
+#### Chat Context ####
+{search_prompt}"""
 
             messages = [
                 {"role": "system", "content": prompt}
