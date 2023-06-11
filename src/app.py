@@ -257,12 +257,11 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     temperature=0,
                     timeout=TIMEOUT,
                 )
+                same_topic = call_res["choices"][0]["message"]["content"].strip()
                 if DEBUG:
                     with st.sidebar:
                         st.subheader("Same topic?")
-                        st.json(call_res, expanded=False)
-                
-                same_topic = call_res["choices"][0]["message"]["content"].strip()
+                        st.markdown(same_topic, expanded=False)
                 if same_topic.lower() == "false":
                     st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
                     search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]["content"]
