@@ -202,7 +202,7 @@ def get_chat_message(
 
 
 async def main(human_prompt: str) -> tuple[int, str]:
-    status = 0,
+    status = 0
     message = "Success"
     try:
         # Strip the prompt of any potentially harmful html/js injections
@@ -239,10 +239,10 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 history_str = "Please summarize the key topics and contents of the below conversation:\n\n"
                 for message in st.session_state.MESSAGES:
                     if message["role"] == "assistant":
-                        history_string += "AI: "
+                        history_str += "AI: "
                     elif message["role"] == "user":
-                        history_string += "Human: "
-                    history_string += message["content"] + "\n"
+                        history_str += "Human: "
+                    history_str += message["content"] + "\n"
                         
                 # Call GPT-3.5-Turbo model to summarize the conversation
                 summary = await openai.ChatCompletion.acreate(
