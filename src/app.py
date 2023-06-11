@@ -11,15 +11,16 @@ import traceback
 import configparser
 from PIL import Image
 import streamlit as st
+from pathlib import Path
 from app_config import *
 from loguru import logger
 from langchain.vectorstores import Chroma
 from langchain.embeddings.openai import OpenAIEmbeddings
 
-FILE_ROOT = os.path.abspath(os.path.dirname(__file__))
+FILE_ROOT = Path(__file__).parent
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--config", type=str, default=None, help="Path to configuration file")
+parser.add_argument("--config", type=Path, default=None, help="Path to configuration file")
 
 # Sanity check inputs
 
@@ -36,14 +37,14 @@ except SystemExit as e:
 ### CACHED FUNCTION DEFINITIONS ###
 
 @st.cache_data(show_spinner=False)
-def get_config(file_path: str) -> configparser.ConfigParser:
+def get_config(file_path: Path) -> configparser.ConfigParser:
     config = configparser.ConfigParser()
-    config.read(file_path)
+    config.read(config_fn)
     return config
 
 
 @st.cache_data(show_spinner=False)
-def get_favicon(file_path: str):
+def get_favicon(file_path: Path):
     # Load a byte image and return its favicon
     return Image.open(file_path)
 
@@ -51,27 +52,27 @@ def get_favicon(file_path: str):
 @st.cache_data(show_spinner=False)
 def get_css() -> str:
     # Read CSS code from style.css file
-    with open(os.path.join(FILE_ROOT, "style.css"), "r") as f:
+    with open(FILE_ROOT / "style.css", "r") as f:
         return f"<style>{f.read()}</style>"
     
 
 @st.cache_data(show_spinner=False)
-def get_local_img(file_path: str) -> str:
+def get_local_img(file_path: Path) -> str:
     # Load a byte image and return its base64 encoded string
     return base64.b64encode(open(file_path, "rb").read()).decode("utf-8")
 
 
 @st.cache_resource(show_spinner=False)
-def get_vector_db(file_path: str) -> Chroma:
-    if not os.path.isdir(file_path):
+def get_vector_db(file_path: Path) -> Chroma:
+    if not file_path.is_dir():
         # Check whether the file of same name but .tar.gz extension exists, if so, extract it
-        tarball_fn = file_path.rstrip("/") + ".tar.gz"
-        if not os.path.isfile(tarball_fn):
+        tarball_fn = file_path.with_suffix(".tar.gz")
+        if not tarball_fn.is_file():
             # Download it from CHROMA_DB_URL
             try:
                 logger.info(f"Downloading vector database from {CHROMA_DB_URL}...")
-                if not os.path.exists(os.path.dirname(tarball_fn)):
-                    os.makedirs(os.path.dirname(tarball_fn), exist_ok=True)
+                if not tarball_fn.parent.exists():
+                    tarball_fn.parent.mkdir(parents=True, exist_ok=True)
                 for i in range(N_RETRIES):
                     try:
                         r = requests.get(CHROMA_DB_URL, allow_redirects=True, timeout=TIMEOUT)
@@ -79,7 +80,7 @@ def get_vector_db(file_path: str) -> Chroma:
                             raise Exception(f"HTTP error {r.status_code}: {r.text}")
                         with open(tarball_fn, "wb") as f:
                             f.write(r.content)
-                        logger.info(f"Saved vector database to {tarball_fn}")
+                        logger.info(f"Saved vector database to {str(tarball_fn)}")
                         time.sleep(COOLDOWN)
                         break
                     except:
@@ -93,10 +94,10 @@ def get_vector_db(file_path: str) -> Chroma:
                 st.stop()
 
         with tarfile.open(tarball_fn, "r:gz") as tar:
-            tar.extractall(path=os.path.dirname(file_path))
+            tar.extractall(path=file_path.parent)
 
     embeddings = OpenAIEmbeddings()
-    return Chroma(persist_directory=file_path, embedding_function=embeddings)
+    return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
 # Get query parameters
 query_params = st.experimental_get_query_params()
@@ -107,7 +108,7 @@ if "DEBUG" in st.session_state and st.session_state.DEBUG:
     DEBUG = True
 
 if "site" in query_params:
-    args.config = f"""cfg/{query_params["site"][0].lower()}.cfg"""
+    args.config = Path("cfg") / f"""{query_params["site"][0].lower()}.cfg"""
 
 if args.config is None:
     st.error("No site specified!")
@@ -115,14 +116,13 @@ if args.config is None:
 
 # Load the config file
 
-config_fn = os.path.join(FILE_ROOT, args.config)
-if not os.path.exists(config_fn):
+config_fn = FILE_ROOT / args.config
+if not config_fn.exists():
     st.error(f"Config file not found: {config_fn}")
     st.stop()
 
-config_basename, _ = os.path.splitext(os.path.basename(config_fn))
-config = configparser.ConfigParser()
-config.read(config_fn)
+config_basename = config_fn.stem
+config = get_config(config_fn)
 
 try:
     for section_name in config.sections():
@@ -142,7 +142,7 @@ except:
     st.stop()
 
 # Initialize a Streamlit UI with custom title and favicon
-favicon = get_favicon(os.path.join(FILE_ROOT, "assets", ICON_FN))
+favicon = get_favicon(FILE_ROOT / "assets" / ICON_FN)
 st.set_page_config(
     page_title=BROWSER_TITLE,
     page_icon=favicon,
@@ -155,7 +155,7 @@ st.set_page_config(
 def get_chat_message(
     line: str,
     loading: bool = False,
-    loading_fp: str = os.path.join(FILE_ROOT, "assets", "loading.gif"),
+    loading_fp: str = FILE_ROOT / "assets" / "loading.gif",
     streaming: bool = False,
 ) -> None:
     # Formats the message in an basic chat fashion
@@ -167,11 +167,11 @@ def get_chat_message(
         contents = line.split("AI: ", 1)[1]
         if "SOURCES: " in contents:
             contents, sources = contents.split("SOURCES: ", 1)
-        file_path = os.path.join(FILE_ROOT, "assets", ICON_FN)
+        file_path = FILE_ROOT / "assets" / ICON_FN
         src = f"data:image/gif;base64,{get_local_img(file_path)}"
     elif line.startswith("Human: "):
         contents = line.split("Human: ", 1)[1]
-        file_path = os.path.join(FILE_ROOT, "assets", "user_icon.png")
+        file_path = FILE_ROOT / "assets" / "user_icon.png"
         image_data = get_local_img(file_path)
         src = f"data:image/gif;base64,{image_data}"       
     else:
@@ -317,7 +317,7 @@ st.markdown(get_css(), unsafe_allow_html=True)
 # components.html(get_js(), height=0, width=0)
 
 # Load the vector database
-persist_directory = os.path.join(FILE_ROOT, CHROMA_DB_DIR, config_basename.replace(".", "_"))
+persist_directory = FILE_ROOT / CHROMA_DB_DIR / config_basename.replace(".", "_")
 with st.spinner("Loading vector database..."):
     vector_db = get_vector_db(persist_directory)
 
