@@ -242,7 +242,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     elif message["role"] == "user":
                         history_str += "Human: "
                     history_str += message["content"] + "\n\n"
-                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]} ### Reply True if all messages are still about the same topic. Reply False if the latest question switched topics. Only reply True or False, and nothing else."
+                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]["content"]} ### Reply True if all messages are still about the same topic. Reply False if the latest question switched topics. Only reply True or False, and nothing else."
 
                 if DEBUG:
                     with st.sidebar:
@@ -265,7 +265,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 same_topic = call_res["choices"][0]["message"]["content"].strip()
                 if same_topic.lower() == "false":
                     st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
-                    search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]
+                    search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]["content"]
                 else:
                     # Either topic did not change or could not be determined, assume not changed
                     search_prompt = history_str.split("###")[1]
