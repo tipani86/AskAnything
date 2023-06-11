@@ -209,10 +209,9 @@ async def main(human_prompt: str) -> tuple[int, str]:
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;").strip()
         
         # Update chat log
-        st.session_state.MESSAGES.append({
-            "role": "user",
-            "content": human_prompt
-        })
+        message = {"role": "user", "content": human_prompt}
+        st.session_state.MESSAGES.append(message)
+        st.session_state.SHORT_TERM_CONTEXT.append(message)
 
         # Clear the input box after human_prompt is used
         prompt_box.empty()
@@ -233,17 +232,16 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     "content": ""
                 }, loading=True)
 
-            summary = ""
-            if len(st.session_state.MESSAGES) > 1:
-                # Summarize chat history so far
-                history_str = "Please summarize the key topics and contents of the below conversation， in the same language as the conversation:\n\n"
-                for message in st.session_state.MESSAGES[:-1]:
+            if len(st.session_state.SHORT_TERM_CONTEXT) > 1:
+                # Check whether short term context needs to be reset
+                history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history ###\n\n"
+                for message in st.session_state.SHORT_TERM_CONTEXT[:-1]:
                     if message["role"] == "assistant":
                         history_str += "AI: "
                     elif message["role"] == "user":
                         history_str += "Human: "
                     history_str += message["content"] + "\n\n"
-                history_str += "Summary:"
+                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]} ### Reply True if all messages are still about the same topic. Reply False if the latest question switched topics. Only reply True or False, and nothing else."
 
                 if DEBUG:
                     with st.sidebar:
@@ -254,24 +252,30 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 call_res = await openai.ChatCompletion.acreate(
                     model="gpt-3.5-turbo",
                     messages=[{"role": "system", "content": history_str}],
-                    max_tokens=500,
+                    max_tokens=10,
                     temperature=0,
                     timeout=TIMEOUT,
                 )
-                summary = call_res["choices"][0]["message"]["content"].strip()
-
-                # Create an adjusted human prompt that attaches the actual prompt text to the two ends of the summary.
-                summary_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
-            else:
-                summary_prompt = human_prompt
+                if DEBUG:
+                    with st.sidebar:
+                        st.subheader("Same topic?")
+                        st.json(call_res, expanded=False)
+                
+                same_topic = call_res["choices"][0]["message"]["content"].strip()
+                if same_topic.lower() == "false":
+                    st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
+                    search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]
+                else:
+                    # Either topic did not change or could not be determined, assume not changed
+                    search_prompt = history_str.split("###")[1]
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(summary_prompt)
+            docs = vector_db.similarity_search(search_prompt)
 
             if DEBUG:
                 with st.sidebar:
-                    st.subheader("Prompt")
-                    st.markdown(summary_prompt)
+                    st.subheader("Search prompt")
+                    st.markdown(search_prompt)
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
@@ -331,10 +335,9 @@ async def main(human_prompt: str) -> tuple[int, str]:
             if reply_text.startswith("AI: "):
                 reply_text = reply_text.split("AI: ", 1)[1]
 
-            st.session_state.MESSAGES.append({
-                "role": "assistant",
-                "content": reply_text
-            })
+            reply_message = {"role": "assistant", "content": reply_text}
+            st.session_state.MESSAGES.append(reply_message)
+            st.session_state.SHORT_TERM_CONTEXT.append(reply_message)
 
     except:
         res_status = 2
@@ -376,6 +379,7 @@ with footer:
 
 if "MESSAGES" not in st.session_state:
     st.session_state.MESSAGES = []
+    st.session_state.SHORT_TERM_CONTEXT = []
 
 # Render chat history so far
 with chat_box:
