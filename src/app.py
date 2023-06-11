@@ -202,8 +202,8 @@ def get_chat_message(
 
 
 async def main(human_prompt: str) -> tuple[int, str]:
-    status = 0
-    message = "Success"
+    res_status = 0
+    res_message = "Success"
     try:
         # Strip the prompt of any potentially harmful html/js injections
         human_prompt = human_prompt.replace("<", "&lt;").replace(">", "&gt;").strip()
@@ -222,8 +222,8 @@ async def main(human_prompt: str) -> tuple[int, str]:
             if len(st.session_state.MESSAGES) > 1:
                 st.divider()
             
-            line = st.session_state.MESSAGES[-1]
-            get_chat_message(line)
+            message = st.session_state.MESSAGES[-1]
+            get_chat_message(message)
             st.divider()
 
             reply_box = st.empty()
@@ -243,6 +243,11 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     elif message["role"] == "user":
                         history_str += "Human: "
                     history_str += message["content"] + "\n"
+
+                if DEBUG:
+                    with st.sidebar:
+                        st.subheader("History_str")
+                        st.markdown(history_str)
                         
                 # Call GPT-3.5-Turbo model to summarize the conversation
                 call_res = await openai.ChatCompletion.acreate(
@@ -253,7 +258,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     stop=NLP_MODEL_STOP_WORDS,
                     timeout=TIMEOUT,
                 )
-                summary = call_res.choices[0].message.content.strip()
+                summary = call_res["choices"][0]["message"]["content"].strip()
 
                 # Create an adjusted human prompt that attaches the actual prompt text to the two ends of the summary.
                 human_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
@@ -330,10 +335,10 @@ async def main(human_prompt: str) -> tuple[int, str]:
             })
 
     except:
-        status = 2
-        message = traceback.format_exc()
+        res_status = 2
+        res_message = traceback.format_exc()
 
-    return status, message
+    return res_status, res_message
 
 ### MAIN APP STARTS HERE ###
 
