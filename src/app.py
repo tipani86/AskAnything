@@ -237,12 +237,13 @@ async def main(human_prompt: str) -> tuple[int, str]:
             if len(st.session_state.MESSAGES) > 1:
                 # Summarize chat history so far
                 history_str = "Please summarize the key topics and contents of the below conversation:\n\n"
-                for message in st.session_state.MESSAGES:
+                for message in st.session_state.MESSAGES[-1:]:
                     if message["role"] == "assistant":
                         history_str += "AI: "
                     elif message["role"] == "user":
                         history_str += "Human: "
-                    history_str += message["content"] + "\n\nSummary:"
+                    history_str += message["content"] + "\n\n"
+                history_str += "Summary:"
 
                 if DEBUG:
                     with st.sidebar:
@@ -255,21 +256,26 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     messages=[{"role": "system", "content": history_str}],
                     max_tokens=500,
                     temperature=0,
-                    stop=NLP_MODEL_STOP_WORDS,
                     timeout=TIMEOUT,
                 )
+                if DEBUG:
+                    with st.sidebar:
+                        st.subheader("Summary_res")
+                        st.markdown(call_res)
                 summary = call_res["choices"][0]["message"]["content"].strip()
 
                 # Create an adjusted human prompt that attaches the actual prompt text to the two ends of the summary.
-                human_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
+                summary_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
+            else:
+                summary_prompt = human_prompt
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(human_prompt)
+            docs = vector_db.similarity_search(summary_prompt)
 
             if DEBUG:
                 with st.sidebar:
                     st.subheader("Prompt")
-                    st.markdown(human_prompt)
+                    st.markdown(summary_prompt)
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
@@ -289,10 +295,10 @@ async def main(human_prompt: str) -> tuple[int, str]:
 #### Documents ####
 {contents}
 #### Question ####
-{human_prompt}"""
+{summary_prompt}"""
 
             messages = [
-                {'role': "system", 'content': prompt}
+                {"role": "system", "content": prompt}
             ]
 
             if DEBUG:
