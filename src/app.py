@@ -236,7 +236,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
             summary = ""
             if len(st.session_state.MESSAGES) > 1:
                 # Summarize chat history so far
-                history_str = "Please summarize the key topics and contents of the below conversation:\n\n"
+                history_str = "Please summarize the key topics and contents of the below conversation， in the same language as the conversation:\n\n"
                 for message in st.session_state.MESSAGES[-1:]:
                     if message["role"] == "assistant":
                         history_str += "AI: "
@@ -258,10 +258,6 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     temperature=0,
                     timeout=TIMEOUT,
                 )
-                if DEBUG:
-                    with st.sidebar:
-                        st.subheader("Summary_res")
-                        st.markdown(call_res)
                 summary = call_res["choices"][0]["message"]["content"].strip()
 
                 # Create an adjusted human prompt that attaches the actual prompt text to the two ends of the summary.
