@@ -4,15 +4,29 @@ Repo for Q&amp;A bot with chat interface and custom data ingestion with vector d
 ## Dependencies
 Make sure you have at least `python 3.8` and install dependencies by running `pip(3) install -r requirements.txt`
 
+## Features
+
+* Ingest your data in several formats and create a local vector database.
+* Spin up a front-end UI using `Streamlit` to ask questions against the built vector database.
+* LLMs are used to finalize the answer based on retrieved database documents.
+* LLMs are also used to determine whether a topic of questioning has changed, which affects optimizations on chat history and memory.
+
 ## Configuration
 You can check out the configuration file in `src/cfg/default.cfg`. It currently has one sample site `vero.fi` which scrapes the Finnish tax office website for Finnish tax regulation, guidelines and other related information.
 
-## Ingesting data into vector database (vero.fi)
-Right now we only support sitemap ingestion, but more methods will be added in the future.
+## Ingesting data into vector database
+
+There are several methods:
+1. Sitemap Ingestion: See `vero.fi.cfg`.
+2. Site Excel (individual pages listed in spreadsheet): See `chunshi.cfg`.
+3. PDF: See `uk_frs.cfg`.
+There might be some code started on other methods but they are not mature yet.
+
+### Run data ingestion with a sample site (vero.fi)
 
 1. Run `python(3) src/ingest_data.py --site vero.fi [--debug]` (debug switch will only scrape a tiny portion of the site so testing can be rapid)
 
-## Running the question answering chatbot locally (vero.fi)
+### Running the question answering chatbot locally with a sample site (vero.fi)
 1. Export your OpenAI API key as an environment variable `export OPENAI_API_KEY=YOUR_KEY_HERE`
 2. Run `streamlit run src/app.py`
 3. Open your browser at [`localhost:8501?site=vero.fi`](http://localhost:8501?site=vero.fi)
