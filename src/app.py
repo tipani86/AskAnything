@@ -245,14 +245,15 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     history_str += message["content"] + "\n"
                         
                 # Call GPT-3.5-Turbo model to summarize the conversation
-                summary = await openai.ChatCompletion.acreate(
+                call_res = await openai.ChatCompletion.acreate(
                     model="gpt-3.5-turbo",
                     messages=history_str,
                     max_tokens=500,
                     temperature=0,
                     stop=NLP_MODEL_STOP_WORDS,
                     timeout=TIMEOUT,
-                )["choices"][0].message.content
+                )
+                summary = call_res.choices[0].message.content.strip()
 
                 # Create an adjusted human prompt that attaches the actual prompt text to the two ends of the summary.
                 human_prompt = f"{human_prompt}\n\n{summary}\n\n{human_prompt}"
@@ -295,7 +296,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     st.json(messages, expanded=False)
 
             # Call the OpenAI ChatGPT API for final result
-            reply_text = "AI: "
+            reply_text = ""
             async for chunk in await openai.ChatCompletion.acreate(
                 model=NLP_MODEL_NAME,
                 messages=messages,
