@@ -18,9 +18,9 @@ from langchain.document_loaders.url import UnstructuredURLLoader
 from langchain.document_loaders import DataFrameLoader, PDFMinerLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-FILE_ROOT = Path(__file__).parent.parent
-chunk_size = 200
-chunk_overlap = 20
+FILE_ROOT = Path(__file__).parent
+chunk_size = 1000
+chunk_overlap = 100
 
 def main(args: argparse.Namespace) -> tuple[int, str]:
     status = 0
@@ -57,6 +57,7 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
             negative_text_page = section["negative_text_page"].split(";")
             negative_text_chunk = section["negative_text_chunk"].split(";")
             min_chunk_length = int(section["min_chunk_length"])
+            chunk_ratio = float(section.get("chunk_ratio", 1.0))
 
             # Remove any escaped characters from the separators and filters
             for lst in [
@@ -90,7 +91,10 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         loader = SitemapLoader(index_url, url_filters)
 
         # Text splitter
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=int(chunk_ratio * chunk_size),
+            chunk_overlap=int(chunk_ratio * chunk_overlap),
+        )
 
         # Load the sitemap
         try:
@@ -147,6 +151,7 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         try:
             section = config["pdf"]
             input_fn = section["input_fn"]
+            chunk_ratio = float(section.get("chunk_ratio", 1.0))
         except:
             status = 2
             message = f"Error reading config file {config_fn}: {traceback.format_exc()}"
@@ -162,7 +167,10 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         loader = PDFMinerLoader(input_fn)
 
         # Text splitter
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=int(chunk_ratio * chunk_size),
+            chunk_overlap=int(chunk_ratio * chunk_overlap),
+        )
 
         # Load the PDF
         try:
@@ -189,8 +197,9 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
 
     if "site_excel" in config.sections():
         try:
-            section = config["pdf"]
+            section = config["site_excel"]
             input_fn = section["input_fn"]
+            chunk_ratio = float(section.get("chunk_ratio", 1.0))
         except:
             status = 2
             message = f"Error reading config file {config_fn}: {traceback.format_exc()}"
@@ -238,27 +247,23 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
                 joined_text = "\n\n".join(texts)
 
                 # If keyword argument start_after is set, cut off any text up to the first occurrence of the keyword
-                if "start_after" in kwargs:
-                    start_after = kwargs["start_after"]
-                    if len(start_after) > 0:
-                        joined_text = joined_text.split(start_after, 1)[-1]
+                if len(start_after) > 0:
+                    joined_text = joined_text.split(start_after, 1)[-1]
 
                 # If keyword argument stop_after is set, cut off any text after the first occurrence of the keyword
-                if "stop_after" in kwargs:
-                    stop_after = kwargs["stop_after"]
-                    if len(stop_after) > 0:
-                        joined_text = joined_text.split(stop_after, 1)[0]
+                if len(stop_after) > 0:
+                    joined_text = joined_text.split(stop_after, 1)[0]
 
                 # Use text splitter to split the text into sentences
                 text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
+                    chunk_size=int(chunk_ratio * chunk_size),
+                    chunk_overlap=int(chunk_ratio * chunk_overlap),
                 )
                 split_texts = text_splitter.split_text(joined_text)
 
                 # Create a document for each split text
                 metadatas = [{"url": url}] * len(split_texts)
-                final_documents.extend(text_splitter.create_documents(split_texts, metadatas))
+                all_texts.extend(text_splitter.create_documents(split_texts, metadatas))
 
         logger.info(f"Generated {len(all_texts)} text chunks from {len(df)} urls")
 
@@ -280,14 +285,22 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         vector_db.persist()
         vector_db = None
     except:
-        res["status"] = 2
-        res["message"] = f"Error persisting vector store: {traceback.format_exc()}"
-        return res
+        status = 2
+        message = f"Error persisting vector store: {traceback.format_exc()}"
+        return status, message
 
     # Compress the vector store into a tar.gz file of the same name
-    tar_cmd = f"tar -czvf {persist_directory}.tar.gz -C {os.path.dirname(persist_directory)} {os.path.basename(persist_directory)}"
+    tar_cmd = f"tar -czvf {str(persist_directory)}.tar.gz -C {str(persist_directory.parent)} {str(persist_directory.name)}"
+    if args.debug:
+        logger.debug(f"tar_cmd = {tar_cmd}")
+    
+    run_res = os.system(tar_cmd)
+    if run_res != 0:
+        status = 2
+        message = f"Error running tar command: {tar_cmd}"
+        return status, message
 
-    return res
+    return status, message
 
 
 if __name__ == "__main__":
@@ -297,8 +310,8 @@ if __name__ == "__main__":
     parser.add_argument("--dry_run", action="store_true", help="Enable dry run mode (do not vectorize or save to database)")
     args = parser.parse_args()
 
-    run_res = main(args)
+    status, message = main(args)
 
-    if run_res["status"] != 0:
-        logger.error(run_res["message"])
-        exit(run_res["status"])
+    if status != 0:
+        logger.error(message)
+        exit(status)
