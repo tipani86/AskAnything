@@ -373,6 +373,13 @@ with footer:
     #     f"Note: This app uses OpenAI's GPT-4 under the hood. The service may sometimes be busy, so please wait patiently if the reply doesn't begin immediately.",
     #     icon="ℹ️")
 
+if DEBUG:
+    with st.sidebar:
+        st.subheader("Debug Area")
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
+
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
 
 if "MESSAGES" not in st.session_state:
