@@ -280,26 +280,18 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
-            contents = []
+            # Build the prompt for the OpenAI ChatGPT API
+            messages = [{"role": "system", "content": INITIAL_PROMPT}]
             for doc in docs:
-                processed_contents = f"Content: {doc.page_content}"
+                processed_contents = f"Retrieved data: {doc.page_content}"
                 if "source" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
                 elif "url" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
-                contents.append(processed_contents)
-            contents = "\n##\n".join(contents)
+                messages.append({"role": "system", "content": processed_contents})
 
-            prompt = f"""#### Instructions ####
-{INITIAL_PROMPT}
-#### Documents ####
-{contents}
-#### Chat Context ####
-{search_prompt}"""
-
-            messages = [
-                {"role": "system", "content": prompt}
-            ]
+            # Add in the existing short term chat history (including the latest human question) to the end of the prompt.
+            messages.extend(st.session_state.SHORT_TERM_CONTEXT)
 
             if DEBUG:
                 with st.sidebar:
