@@ -187,15 +187,17 @@ def get_chat_message(
             if streaming:
                 pass
             else:
-                sources = sources.split(",")
-                if len(sources) > 0:
+                try:
+                    sources = json.loads(sources)
                     html = ""
-                    for i, source in enumerate(sources):
+                    for i, source in enumerate(sources["sources"]):
                         if len(source.strip()) == 0:
                             continue
                         html += f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
                     if len(html) > 0:
                         st.markdown(html, unsafe_allow_html=True)
+                except:
+                    st.caption(sources)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
