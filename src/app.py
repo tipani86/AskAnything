@@ -1,6 +1,7 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import time
+import json
 import openai
 import base64
 import tarfile
@@ -191,13 +192,16 @@ def get_chat_message(
                     sources = json.loads(sources)
                     html = ""
                     for i, source in enumerate(sources["sources"]):
-                        if len(source.strip()) == 0:
+                        if "url" not in source:
                             continue
-                        html += f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
+                        if source["url"].strip() == "":
+                            continue
+                        html += f"<a target='_BLANK' href='{source['url'].strip()}'>[{i + 1}]</a>"
                     if len(html) > 0:
                         st.markdown(html, unsafe_allow_html=True)
                 except:
                     st.caption(sources)
+                    st.warning(traceback.format_exc())
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
