@@ -289,7 +289,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
             # Build the prompt for the OpenAI ChatGPT API
             messages = [{"role": "system", "content": INITIAL_PROMPT}]
             for doc in docs:
-                processed_contents = f"Retrieved data: {doc.page_content}"
+                processed_contents = doc.page_content
                 if "source" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
                 elif "url" in doc.metadata:
