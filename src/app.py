@@ -271,7 +271,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     search_prompt = history_str.split("###")[1]
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(search_prompt)
+            docs = vector_db.similarity_search(search_prompt, VECTOR_N_RESULTS)
 
             if DEBUG:
                 with st.sidebar:
