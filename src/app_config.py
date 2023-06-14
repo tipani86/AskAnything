@@ -20,4 +20,4 @@ NLP_MODEL_STOP_WORDS = ["Human:", "AI:"]
 # Settings for vector store
 
 CHROMA_DB_DIR = "_chroma_db"
-VECTOR_N_RESULTS = 12  # The N nearest documents to retrieve based on the query, should be in line with NLP_MODEL_MAX_TOKENS size
+VECTOR_N_RESULTS = 8  # The N nearest documents to retrieve based on the query, should be in line with NLP_MODEL_MAX_TOKENS size
