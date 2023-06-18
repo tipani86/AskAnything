@@ -15,12 +15,12 @@ from langchain.docstore.document import Document
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.document_loaders.sitemap import SitemapLoader
 from langchain.document_loaders.url import UnstructuredURLLoader
-from langchain.document_loaders import DataFrameLoader, PDFMinerLoader
+from langchain.document_loaders import DataFrameLoader, PyMuPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 FILE_ROOT = Path(__file__).parent
-chunk_size = 1000
-chunk_overlap = 100
+chunk_size = 2000
+chunk_overlap = 200
 
 def main(args: argparse.Namespace) -> tuple[int, str]:
     status = 0
@@ -164,7 +164,7 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         # Initialize all needed objects
 
         # PDF loader
-        loader = PDFMinerLoader(input_fn)
+        loader = PyMuPDFLoader(input_fn)
 
         # Text splitter
         text_splitter = RecursiveCharacterTextSplitter(
@@ -185,6 +185,9 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
             doc.metadata["source"] = os.path.basename(input_fn)
 
         all_texts = text_splitter.split_documents(docs)
+        # Fix page numbers (because they are 0-indexed)
+        for text in all_texts:
+            text.metadata["page"] += 1
 
         if args.debug:
             # Print the first 5 text entries
@@ -290,7 +293,7 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
         return status, message
 
     # Compress the vector store into a tar.gz file of the same name
-    tar_cmd = f"tar -czvf {str(persist_directory)}.tar.gz -C {str(persist_directory.parent)} {str(persist_directory.name)}"
+    tar_cmd = f"tar -czvf {persist_directory}.tar.gz -C {str(Path(persist_directory).parent)} {str(Path(persist_directory).name)}"
     if args.debug:
         logger.debug(f"tar_cmd = {tar_cmd}")
     

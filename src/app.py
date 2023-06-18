@@ -1,6 +1,7 @@
 # App to load the vector database and let users to ask questions from it
 import os
 import time
+import json
 import openai
 import base64
 import tarfile
@@ -187,15 +188,23 @@ def get_chat_message(
             if streaming:
                 pass
             else:
-                sources = sources.split(",")
-                if len(sources) > 0:
-                    html = ""
-                    for i, source in enumerate(sources):
-                        if len(source.strip()) == 0:
-                            continue
-                        html += f"<a target='_BLANK' href='{source.strip()}'>[{i + 1}]</a>"
-                    if len(html) > 0:
-                        st.markdown(html, unsafe_allow_html=True)
+                try:
+                    sources = json.loads(sources)
+                    urls = []
+                    for i, source in enumerate(sources["sources"]):
+                        if "url" not in source:
+                            raise
+                        if source["url"].strip() == "":
+                            raise
+                        urls.append(source["url"])
+                    if len(urls) > 0:
+                        markdown_text = ""
+                        for i, url in enumerate(urls):
+                            markdown_text += f"[[{i+1}]]({url}) "
+                        st.markdown(markdown_text)
+                except:
+                    with st.expander("Sources"):
+                        st.json(sources["sources"], expanded=True)  
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
@@ -271,7 +280,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     search_prompt = history_str.split("###")[1]
 
             # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(search_prompt)
+            docs = vector_db.similarity_search(search_prompt, VECTOR_N_RESULTS)
 
             if DEBUG:
                 with st.sidebar:
@@ -280,26 +289,20 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     st.subheader("Reference materials")
                     st.json(docs, expanded=False)
 
-            contents = []
+            # Build the prompt for the OpenAI ChatGPT API
+            messages = [{"role": "system", "content": INITIAL_PROMPT}]
             for doc in docs:
-                processed_contents = f"Content: {doc.page_content}"
+                processed_contents = doc.page_content
                 if "source" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
                 elif "url" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
-                contents.append(processed_contents)
-            contents = "\n##\n".join(contents)
+                if "page" in doc.metadata:
+                    processed_contents += f" (page {doc.metadata['page']})"
+                messages.append({"role": "system", "content": processed_contents})
 
-            prompt = f"""#### Instructions ####
-{INITIAL_PROMPT}
-#### Documents ####
-{contents}
-#### Chat Context ####
-{search_prompt}"""
-
-            messages = [
-                {"role": "system", "content": prompt}
-            ]
+            # Add in the existing short term chat history (including the latest human question) to the end of the prompt.
+            messages.extend(st.session_state.SHORT_TERM_CONTEXT)
 
             if DEBUG:
                 with st.sidebar:
@@ -370,10 +373,17 @@ with st.spinner("Loading vector database..."):
 
 with footer:
     st.markdown(FOOTER_HTML, unsafe_allow_html=True)
-    st.write("")
-    st.info(
-        f"Note: This app uses OpenAI's GPT-4 under the hood. The service may sometimes be busy, so please wait patiently if the reply doesn't begin immediately.",
-        icon="ℹ️")
+    # st.write("")
+    # st.info(
+    #     f"Note: This app uses OpenAI's GPT-4 under the hood. The service may sometimes be busy, so please wait patiently if the reply doesn't begin immediately.",
+    #     icon="ℹ️")
+
+if DEBUG:
+    with st.sidebar:
+        st.subheader("Debug Area")
+        if st.button("Clear Cache"):
+            st.cache_data.clear()
+            st.cache_resource.clear()
 
 # Initialize/maintain a chat log so we can keep tabs on previous Q&As
 
