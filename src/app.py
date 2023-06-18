@@ -193,15 +193,15 @@ def get_chat_message(
                     html = ""
                     for i, source in enumerate(sources["sources"]):
                         if "url" not in source:
-                            continue
+                            raise
                         if source["url"].strip() == "":
-                            continue
+                            raise
                         html += f"<a target='_BLANK' href='{source['url'].strip()}'>[{i + 1}]</a>"
                     if len(html) > 0:
                         st.markdown(html, unsafe_allow_html=True)
                 except:
-                    st.caption(sources)
-                    st.warning(traceback.format_exc())
+                    with st.expander("Sources"):
+                        st.json(sources, expanded=False)  
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
@@ -294,6 +294,8 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
                 elif "url" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
+                if "page" in doc.metadata:
+                    processed_contents += f"\n\n(page {doc.metadata['page']})"
                 messages.append({"role": "system", "content": processed_contents})
 
             # Add in the existing short term chat history (including the latest human question) to the end of the prompt.
