@@ -2,6 +2,7 @@ bs4
 lxml
 openai
 loguru
+pymupdf
 aiohttp
 openpyxl
 requests
