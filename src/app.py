@@ -190,15 +190,18 @@ def get_chat_message(
             else:
                 try:
                     sources = json.loads(sources)
-                    html = ""
+                    urls = []
                     for i, source in enumerate(sources["sources"]):
                         if "url" not in source:
                             raise
                         if source["url"].strip() == "":
                             raise
-                        html += f"<a target='_BLANK' href='{source['url'].strip()}'>[{i + 1}]</a>"
-                    if len(html) > 0:
-                        st.markdown(html, unsafe_allow_html=True)
+                        urls.append(source["url"])
+                    if len(urls) > 0:
+                        markdown_text = ""
+                        for i, url in enumerate(urls):
+                            markdown_text += f"[[{i+1}]]({url}) "
+                        st.markdown(markdown_text)
                 except:
                     with st.expander("Sources"):
                         st.json(sources["sources"], expanded=True)  
