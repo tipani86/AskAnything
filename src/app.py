@@ -295,7 +295,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 elif "url" in doc.metadata:
                     processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
                 if "page" in doc.metadata:
-                    processed_contents += f"(page {doc.metadata['page']})"
+                    processed_contents += f" (page {doc.metadata['page']})"
                 messages.append({"role": "system", "content": processed_contents})
 
             # Add in the existing short term chat history (including the latest human question) to the end of the prompt.
