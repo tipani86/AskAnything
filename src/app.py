@@ -16,6 +16,7 @@ from pathlib import Path
 from app_config import *
 from loguru import logger
 from langchain.vectorstores import Chroma
+import streamlit.components.v1 as components
 from langchain.embeddings.openai import OpenAIEmbeddings
 
 FILE_ROOT = Path(__file__).parent
@@ -100,6 +101,20 @@ def get_vector_db(file_path: Path) -> Chroma:
     embeddings = OpenAIEmbeddings()
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
+def copy_to_clipboard(id: str, text: str):
+    clipboard_js = """<style>
+body {{
+    margin: 0px;
+}}
+</style>
+<button id="{}" title="Copy to Clipboard">📋</button>
+<script>
+document.getElementById("{}").addEventListener("click", event => {{
+    navigator.clipboard.writeText(`{}`);
+}});
+</script>"""
+    components.html(clipboard_js.format(id, id, text.replace("`", "\\`")), height=26)
+
 # Get query parameters
 query_params = st.experimental_get_query_params()
 if "debug" in query_params and query_params["debug"][0].lower() == "true":
@@ -154,6 +169,7 @@ st.set_page_config(
 
 
 def get_chat_message(
+    i: int,
     message: dict[str, str],
     loading: bool = False,
     loading_fp: str = FILE_ROOT / "assets" / "loading.gif",
@@ -181,6 +197,9 @@ def get_chat_message(
 
     with image_container:
         st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
+        if role == "assistant" and i > 0:
+            st.write("")
+            copy_to_clipboard(f"copy_{i}", contents)
 
     with contents_container:
         st.markdown(contents)
@@ -204,7 +223,7 @@ def get_chat_message(
                         st.markdown(markdown_text)
                 except:
                     with st.expander("Sources"):
-                        st.json(sources["sources"], expanded=True)  
+                        st.json(sources["sources"], expanded=True)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
@@ -231,12 +250,12 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 st.divider()
             
             message = st.session_state.MESSAGES[-1]
-            get_chat_message(message)
+            get_chat_message(-1, message)
             st.divider()
 
             reply_box = st.empty()
             with reply_box:
-                get_chat_message({
+                get_chat_message(-1, {
                     "role": "assistant",
                     "content": ""
                 }, loading=True)
@@ -326,7 +345,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
 
                     # Continuously render the reply as it comes in
                     with reply_box:
-                        get_chat_message({
+                        get_chat_message(-1, {
                             "role": "assistant",
                             "content": reply_text
                         }, streaming=True)
@@ -394,7 +413,7 @@ if "MESSAGES" not in st.session_state:
 # Render chat history so far
 with chat_box:
     for i, message in enumerate(st.session_state.MESSAGES):
-        get_chat_message(message)
+        get_chat_message(i, message)
         # Add a divider between messages unless it's the last message
         if i < len(st.session_state.MESSAGES) - 1:
             st.divider()
@@ -416,4 +435,3 @@ if submitted and len(human_prompt) > 0:
         with prompt_box:
             if st.button("Show text input field"):
                 st.experimental_rerun()
-
