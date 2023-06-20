@@ -224,7 +224,7 @@ def get_chat_message(
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
-    if role == "assistant" and id > 0:
+    if role == "assistant" and i > 0:
         with image_container:
             copy_to_clipboard(f"copy_{i}", contents)
 
