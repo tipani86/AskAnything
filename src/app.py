@@ -224,7 +224,7 @@ def get_chat_message(
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
-    if role == "assistant":
+    if role == "assistant" and id > 0:
         with image_container:
             copy_to_clipboard(f"copy_{i}", contents)
 
@@ -251,12 +251,12 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 st.divider()
             
             message = st.session_state.MESSAGES[-1]
-            get_chat_message(message)
+            get_chat_message(-1, message)
             st.divider()
 
             reply_box = st.empty()
             with reply_box:
-                get_chat_message({
+                get_chat_message(-1, {
                     "role": "assistant",
                     "content": ""
                 }, loading=True)
@@ -346,7 +346,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
 
                     # Continuously render the reply as it comes in
                     with reply_box:
-                        get_chat_message({
+                        get_chat_message(-1, {
                             "role": "assistant",
                             "content": reply_text
                         }, streaming=True)
