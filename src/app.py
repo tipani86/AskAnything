@@ -198,6 +198,7 @@ def get_chat_message(
     with image_container:
         st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
         if role == "assistant" and i > 0:
+            st.write("")
             copy_to_clipboard(f"copy_{i}", contents)
 
     with contents_container:
