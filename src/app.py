@@ -244,13 +244,9 @@ async def main(human_prompt: str) -> tuple[int, str]:
         prompt_box.empty()
 
         with chat_box:
-            # Write the latest human message first
-            if len(st.session_state.MESSAGES) > 1:
-                st.divider()
             
             message = st.session_state.MESSAGES[-1]
             get_chat_message(-1, message)
-            st.divider()
 
             reply_box = st.empty()
             with reply_box:
@@ -413,9 +409,6 @@ if "MESSAGES" not in st.session_state:
 with chat_box:
     for i, message in enumerate(st.session_state.MESSAGES):
         get_chat_message(i, message)
-        # Add a divider between messages unless it's the last message
-        if i < len(st.session_state.MESSAGES) - 1:
-            st.divider()
 
 # Define an input box for human prompts
 with prompt_box:
