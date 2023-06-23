@@ -198,8 +198,6 @@ def get_chat_message(
     with image_container:
         st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
         st.write("")
-        if i >= 0:
-            copy_to_clipboard(f"copy_{i}", contents)
 
     with contents_container:
         st.markdown(contents)
@@ -224,6 +222,8 @@ def get_chat_message(
                 except:
                     with st.expander("Sources"):
                         st.json(sources["sources"], expanded=True)
+                if i >= 0:
+                    copy_to_clipboard(f"copy_{i}", contents)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
