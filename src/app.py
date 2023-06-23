@@ -244,7 +244,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
         prompt_box.empty()
 
         with chat_box:
-            
+            # Write the latest human message first
             message = st.session_state.MESSAGES[-1]
             get_chat_message(-1, message)
 
