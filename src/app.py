@@ -172,7 +172,7 @@ def get_chat_message(
     i: int,
     message: dict[str, str],
     loading: bool = False,
-    loading_fp: str = FILE_ROOT / "assets" / "loading.gif",
+    loading_fp: Path = FILE_ROOT / "assets" / "loading.gif",
     streaming: bool = False,
 ) -> None:
     # Formats the message in an basic chat fashion
@@ -205,10 +205,10 @@ def get_chat_message(
             if streaming:
                 pass
             else:
+                sources = json.loads(sources)
                 try:
-                    sources = json.loads(sources)
                     urls = []
-                    for i, source in enumerate(sources["sources"]):
+                    for source in sources["sources"]:
                         if "url" not in source:
                             raise
                         if source["url"].strip() == "":
@@ -216,17 +216,16 @@ def get_chat_message(
                         urls.append(source["url"])
                     if len(urls) > 0:
                         markdown_text = ""
-                        for i, url in enumerate(urls):
-                            markdown_text += f"[[{i+1}]]({url}) "
+                        for j, url in enumerate(urls):
+                            markdown_text += f"[[{j+1}]]({url}) "
                         st.markdown(markdown_text)
                 except:
                     with st.expander("Sources"):
                         st.json(sources["sources"], expanded=True)
-        if role == "assistant" and i > 0:
+        if i >= 0:
             copy_to_clipboard(f"copy_{i}", contents)
         if loading:
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
-
 
 
 async def main(human_prompt: str) -> tuple[int, str]:
@@ -246,12 +245,8 @@ async def main(human_prompt: str) -> tuple[int, str]:
 
         with chat_box:
             # Write the latest human message first
-            if len(st.session_state.MESSAGES) > 1:
-                st.divider()
-            
             message = st.session_state.MESSAGES[-1]
             get_chat_message(-1, message)
-            st.divider()
 
             reply_box = st.empty()
             with reply_box:
@@ -414,9 +409,6 @@ if "MESSAGES" not in st.session_state:
 with chat_box:
     for i, message in enumerate(st.session_state.MESSAGES):
         get_chat_message(i, message)
-        # Add a divider between messages unless it's the last message
-        if i < len(st.session_state.MESSAGES) - 1:
-            st.divider()
 
 # Define an input box for human prompts
 with prompt_box:
