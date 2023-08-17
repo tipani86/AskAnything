@@ -1,3 +1,4 @@
+.DS_Store
 __pycache__
 src/_chroma_db
 data_import
