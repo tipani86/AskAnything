@@ -27,6 +27,12 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
     message = "Success"
     if args.dry_run:
         logger.warning("Dry run mode enabled! (No vectorization or database save)")
+    else:
+        # Check if the OpenAI API key is set
+        if "OPENAI_API_KEY" not in os.environ:
+            status = 2
+            message = "OpenAI API key not set! Please set the OPENAI_API_KEY environment variable to your OpenAI API key"
+            return status, message
     if args.debug:
         logger.warning("Debug mode enabled! (Depending on the config, the behavior may change)")
 
@@ -230,7 +236,7 @@ def main(args: argparse.Namespace) -> tuple[int, str]:
             stop_after = site_config.get("stop_after", "")
 
             urls = gdf['url'].tolist()
-            loader = UnstructuredURLLoader(urls, mode="elements", headers={"User-Agent": "Mozilla/5.0"})
+            loader = UnstructuredURLLoader(urls, mode="elements", headers={"User-Agent": "Mozilla/5.0"}, show_progress_bar=True)
             docs = loader.load()
 
             # Create a url to document text lookup dict
