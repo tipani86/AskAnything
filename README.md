@@ -27,6 +27,14 @@ There might be some code started on other methods but they are not mature yet.
 1. Run `python(3) src/ingest_data.py --site vero.fi [--debug]` (debug switch will only scrape a tiny portion of the site so testing can be rapid)
 
 ### Running the question answering chatbot locally with a sample site (vero.fi)
-1. Export your OpenAI API key as an environment variable `export OPENAI_API_KEY=YOUR_KEY_HERE`
+
+1. Export your OpenAI or Azure OpenAI API related environment variables as follows:
+
+| Variable Name | Description |
+| --- | --- |
+| `OPENAI_API_KEY` | Your OpenAI API key, or the Azure OpenAI resource's `Key1` or `Key2` (both are okay) if Azure |
+| `OPENAI_API_BASE` | `https://api.openai.com/v1` if OpenAI, or the Azure OpenAI resource's `Endpoint` value if Azure |
+| `OPENAI_API_TYPE` | `"open_ai"` or `"azure"` |
+
 2. Run `streamlit run src/app.py`
 3. Open your browser at [`localhost:8501?site=vero.fi`](http://localhost:8501?site=vero.fi)

@@ -14,7 +14,6 @@ BACKOFF = 1.5
 NLP_MODEL_NAME = "gpt-4"
 NLP_MODEL_MAX_TOKENS = 8000
 NLP_MODEL_REPLY_MAX_TOKENS = 2000
-NLP_MODEL_STOP_WORDS = ["Human:", "AI:"]
 
 
 # Settings for vector store

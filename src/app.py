@@ -98,7 +98,7 @@ def get_vector_db(file_path: Path) -> Chroma:
         with tarfile.open(tarball_fn, "r:gz") as tar:
             tar.extractall(path=file_path.parent)
 
-    embeddings = OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(deployment="text-embedding-ada-002") if api_type == "azure" else OpenAIEmbeddings()
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
 def copy_to_clipboard(id: str, text: str):
@@ -156,6 +156,19 @@ try:
 except:
     st.error(f"Error reading config file {config_fn}: {traceback.format_exc()}")
     st.stop()
+
+# Sanity check on environmental variables
+env_keys = ["OPENAI_API_KEY", "OPENAI_API_BASE", "OPENAI_API_TYPE"]
+env_var_errors = []
+for key in env_keys:
+    if key not in os.environ:
+        env_var_errors.append(key)
+
+api_type = os.environ.get("OPENAI_API_TYPE")
+    
+if len(env_var_errors) > 0:
+    logger.error(f"Please set the following environment variables: {env_var_errors}")
+    os._exit(2)
 
 # Initialize a Streamlit UI with custom title and favicon
 favicon = get_favicon(FILE_ROOT / "assets" / ICON_FN)
@@ -258,14 +271,14 @@ async def main(human_prompt: str) -> tuple[int, str]:
             search_prompt = human_prompt
             if len(st.session_state.SHORT_TERM_CONTEXT) > 1:
                 # Check whether short term context needs to be reset
-                history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history ###\n\n"
+                history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history\n\n###\n\n"
                 for message in st.session_state.SHORT_TERM_CONTEXT[:-1]:
                     if message["role"] == "assistant":
                         history_str += "AI: "
                     elif message["role"] == "user":
                         history_str += "Human: "
                     history_str += message["content"] + "\n\n"
-                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]['content']} ### Reply True if all messages are still about the same topic. Reply False if the latest question switched topics. Only reply True or False, and nothing else."
+                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]['content']}\n\n###\n\nReply True if all messages are still about the same topic. Reply False if the latest question switched topics. Note that there might be subtle differences in the subtopics being discussed. Please flag even the small changes in subject. Only reply True or False, and nothing else."
 
                 if DEBUG:
                     with st.sidebar:
@@ -274,7 +287,8 @@ async def main(human_prompt: str) -> tuple[int, str]:
                         
                 # Call GPT-3.5-Turbo model to determine if topic changed
                 call_res = await openai.ChatCompletion.acreate(
-                    model="gpt-3.5-turbo",
+                    model="gpt-35-turbo",
+                    engine="gpt-35-turbo" if api_type == "azure" else None,
                     messages=[{"role": "system", "content": history_str}],
                     max_tokens=10,
                     temperature=0,
@@ -327,10 +341,10 @@ async def main(human_prompt: str) -> tuple[int, str]:
             reply_text = ""
             async for chunk in await openai.ChatCompletion.acreate(
                 model=NLP_MODEL_NAME,
+                engine=NLP_MODEL_NAME if api_type == "azure" else None,
                 messages=messages,
                 max_tokens=NLP_MODEL_REPLY_MAX_TOKENS,
                 temperature=0,
-                stop=NLP_MODEL_STOP_WORDS,
                 stream=True,
                 timeout=TIMEOUT,
             ):
@@ -420,10 +434,10 @@ with prompt_box:
 if submitted and len(human_prompt) > 0:
     status, message = asyncio.run(main(human_prompt))
     if status == 0 and not DEBUG:
-        st.experimental_rerun()
+        st.rerun()
     else:
         if status != 0:
             st.error(message)
         with prompt_box:
             if st.button("Show text input field"):
-                st.experimental_rerun()
+                st.rerun()
