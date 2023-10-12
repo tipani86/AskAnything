@@ -98,7 +98,7 @@ def get_vector_db(file_path: Path) -> Chroma:
         with tarfile.open(tarball_fn, "r:gz") as tar:
             tar.extractall(path=file_path.parent)
 
-    embeddings = OpenAIEmbeddings(deployment="text-embedding-ada-002") if api_base == "azure" else OpenAIEmbeddings()
+    embeddings = OpenAIEmbeddings(deployment="text-embedding-ada-002") if api_type == "azure" else OpenAIEmbeddings()
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
 def copy_to_clipboard(id: str, text: str):
@@ -164,7 +164,7 @@ for key in env_keys:
     if key not in os.environ:
         env_var_errors.append(key)
 
-api_base = os.environ.get("OPENAI_API_BASE")
+api_type = os.environ.get("OPENAI_API_TYPE")
     
 if len(env_var_errors) > 0:
     logger.error(f"Please set the following environment variables: {env_var_errors}")
@@ -288,7 +288,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
                 # Call GPT-3.5-Turbo model to determine if topic changed
                 call_res = await openai.ChatCompletion.acreate(
                     model="gpt-35-turbo",
-                    engine="gpt-35-turbo" if api_base == "azure" else None,
+                    engine="gpt-35-turbo" if api_type == "azure" else None,
                     messages=[{"role": "system", "content": history_str}],
                     max_tokens=10,
                     temperature=0,
@@ -341,7 +341,7 @@ async def main(human_prompt: str) -> tuple[int, str]:
             reply_text = ""
             async for chunk in await openai.ChatCompletion.acreate(
                 model=NLP_MODEL_NAME,
-                engine=NLP_MODEL_NAME if api_base == "azure" else None,
+                engine=NLP_MODEL_NAME if api_type == "azure" else None,
                 messages=messages,
                 max_tokens=NLP_MODEL_REPLY_MAX_TOKENS,
                 temperature=0,
