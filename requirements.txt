@@ -1,7 +1,6 @@
 bs4
 lxml
 tqdm
-openai
 loguru
 pymupdf
 aiohttp
@@ -10,5 +9,6 @@ requests
 tiktoken
 streamlit
 nest_asyncio
+openai==0.28.1
 chromadb < 0.4.0
 langchain < 0.0.230
