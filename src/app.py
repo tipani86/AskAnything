@@ -17,7 +17,6 @@ from pathlib import Path
 from app_config import *
 from loguru import logger
 from langchain.vectorstores import Chroma
-import streamlit.components.v1 as components
 from langchain.embeddings.openai import OpenAIEmbeddings
 
 FILE_ROOT = Path(__file__).parent
@@ -42,7 +41,7 @@ except SystemExit as e:
 @st.cache_data(show_spinner=False)
 def get_config(file_path: Path) -> configparser.ConfigParser:
     config = configparser.ConfigParser()
-    config.read(config_fn)
+    config.read(file_path)
     return config
 
 
@@ -57,12 +56,6 @@ def get_css() -> str:
     # Read CSS code from style.css file
     with open(FILE_ROOT / "style.css", "r") as f:
         return f"<style>{f.read()}</style>"
-    
-
-@st.cache_data(show_spinner=False)
-def get_local_img(file_path: Path) -> str:
-    # Load a byte image and return its base64 encoded string
-    return base64.b64encode(open(file_path, "rb").read()).decode("utf-8")
 
 
 @st.cache_resource(show_spinner=False)
@@ -101,20 +94,6 @@ def get_vector_db(file_path: Path) -> Chroma:
 
     embeddings = OpenAIEmbeddings(deployment="text-embedding-ada-002") if api_type == "azure" else OpenAIEmbeddings()
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
-
-def copy_to_clipboard(id: str, text: str):
-    clipboard_js = """<style>
-body {{
-    margin: 0px;
-}}
-</style>
-<button id="{}" title="Copy to Clipboard">📋</button>
-<script>
-document.getElementById("{}").addEventListener("click", event => {{
-    navigator.clipboard.writeText(`{}`);
-}});
-</script>"""
-    components.html(clipboard_js.format(id, id, text.replace("`", "\\`")), height=26)
 
 # Get query parameters
 query_params = st.experimental_get_query_params()
@@ -180,66 +159,6 @@ st.set_page_config(
 
 
 ### OTHER FUNCTION DEFINITIONS ###
-
-def get_chat_message(
-    i: int,
-    message: dict[str, str],
-    loading: bool = False,
-    loading_fp: Path = FILE_ROOT / "assets" / "loading.gif",
-    streaming: bool = False,
-) -> None:
-    # Formats the message in an basic chat fashion
-    image_container, contents_container = st.columns([1, 11], gap="small")
-
-    sources = ""
-
-    role = message["role"]
-    contents = message["content"]
-    if role == "assistant":
-        if "SOURCES: " in contents:
-            contents, sources = contents.split("SOURCES: ", 1)
-        file_path = FILE_ROOT / "assets" / ICON_FN
-        src = f"data:image/gif;base64,{get_local_img(file_path)}"
-    elif role == "user":
-        file_path = FILE_ROOT / "assets" / "user_icon.png"
-        image_data = get_local_img(file_path)
-        src = f"data:image/gif;base64,{image_data}"       
-    else:
-        # Not a message that needs to be rendered (for example, system message)
-        return
-
-    with image_container:
-        st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
-        st.write("")
-
-    with contents_container:
-        st.markdown(contents)
-        if len(sources) > 0:
-            if streaming:
-                pass
-            else:
-                sources = json.loads(sources)
-                try:
-                    urls = []
-                    for source in sources["sources"]:
-                        if "url" not in source:
-                            raise
-                        if source["url"].strip() == "":
-                            raise
-                        urls.append(source["url"])
-                    if len(urls) > 0:
-                        markdown_text = ""
-                        for j, url in enumerate(urls):
-                            markdown_text += f"[[{j+1}]]({url}) "
-                        st.markdown(markdown_text)
-                except:
-                    with st.expander("Sources"):
-                        st.json(sources["sources"], expanded=True)
-        if i >= 0:
-            copy_to_clipboard(f"copy_{i}", contents)
-        if loading:
-            st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
-
 
 def search_documents(kwargs) -> list[str]:
     """Helper function to search documents in the provided database"""
