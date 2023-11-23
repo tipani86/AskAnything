@@ -10,6 +10,7 @@ import argparse
 import requests
 import traceback
 import configparser
+from utils import *
 from PIL import Image
 import streamlit as st
 from pathlib import Path
@@ -180,7 +181,6 @@ st.set_page_config(
 
 ### OTHER FUNCTION DEFINITIONS ###
 
-
 def get_chat_message(
     i: int,
     message: dict[str, str],
@@ -241,6 +241,60 @@ def get_chat_message(
             st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
 
 
+def search_documents(kwargs) -> list[str]:
+    """Helper function to search documents in the provided database"""
+    query = kwargs.get("query", None)
+    if query is None:
+        return []
+    if vector_db is None:
+        return []
+    else:
+        docs = vector_db.similarity_search(query, VECTOR_N_RESULTS)
+
+    if DEBUG:
+        with st.sidebar:
+            st.write("Query")
+            st.text(query)
+            st.write("Reference materials")
+            st.json(docs, expanded=False)
+
+    # Output reference materials (with sources, if appropriate)
+    outputs = []
+    for doc in docs:
+        processed_contents = doc.page_content
+        if "url" in doc.metadata:
+            processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
+        elif "source" in doc.metadata:
+            processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
+        if "page" in doc.metadata:
+            processed_contents += f" (page {doc.metadata['page']})"
+        outputs.append(processed_contents)
+    return outputs
+
+
+FUNCTIONS = {
+    "available_funs": {
+        "search_documents": search_documents,
+    }, 
+    "api_in": [
+        {
+            "name": "search_documents",
+            "description": "Search for relevant documents from a database to help answer questions.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Query string, inferred from the user message, to search the documents for. Sample query styles: 'maatalousvähennys verotuksessa' or '工匠师进场要留意的安全事项'"
+                    }
+                },
+                "required": ["query"]
+            }
+        }
+    ]
+}
+
+
 async def main(human_prompt: str) -> tuple[int, str]:
     res_status = 0
     res_message = "Success"
@@ -251,7 +305,6 @@ async def main(human_prompt: str) -> tuple[int, str]:
         # Update chat log
         message = {"role": "user", "content": human_prompt}
         st.session_state.MESSAGES.append(message)
-        st.session_state.SHORT_TERM_CONTEXT.append(message)
 
         # Clear the input box after human_prompt is used
         prompt_box.empty()
@@ -268,111 +321,79 @@ async def main(human_prompt: str) -> tuple[int, str]:
                     "content": ""
                 }, loading=True)
 
-            search_prompt = human_prompt
-            if len(st.session_state.SHORT_TERM_CONTEXT) > 1:
-                # Check whether short term context needs to be reset
-                history_str = "Evaluate whether the latest human question (at the bottom) is talking about the same topic as the other conversation history\n\n###\n\n"
-                for message in st.session_state.SHORT_TERM_CONTEXT[:-1]:
-                    if message["role"] == "assistant":
-                        history_str += "AI: "
-                    elif message["role"] == "user":
-                        history_str += "Human: "
-                    history_str += message["content"] + "\n\n"
-                history_str += f"Human: {st.session_state.SHORT_TERM_CONTEXT[-1]['content']}\n\n###\n\nReply True if all messages are still about the same topic. Reply False if the latest question switched topics. Note that there might be subtle differences in the subtopics being discussed. Please flag even the small changes in subject. Only reply True or False, and nothing else."
+        # Step 1: See if chat memory needs to be shortened to fit context
+        summary_res, summary_message, summary_data = await generate_prompt_from_memory_async(
+            messages=st.session_state.MESSAGES,
+            model_name="gpt-35-turbo-16k",    # Always use gpt-3.5-turbo-16k for summarization for cost and speed reasons
+            max_tokens=NLP_MODEL_MAX_TOKENS,
+            functions_tokens=NLP_MODEL_FUNCTIONS_TOKENS,
+            reply_max_tokens=NLP_MODEL_REPLY_MAX_TOKENS
+        )
+        if summary_res != 0:
+            return summary_res, summary_message
+        
+        st.session_state.MESSAGES = summary_data["messages"]
 
-                if DEBUG:
-                    with st.sidebar:
-                        st.subheader("History_str")
-                        st.markdown(history_str)
-                        
-                # Call GPT-3.5-Turbo model to determine if topic changed
-                call_res = await openai.ChatCompletion.acreate(
-                    model="gpt-35-turbo",
-                    engine="gpt-35-turbo" if api_type == "azure" else None,
-                    messages=[{"role": "system", "content": history_str}],
-                    max_tokens=10,
-                    temperature=0,
-                    timeout=TIMEOUT,
-                )
-                same_topic = call_res["choices"][0]["message"]["content"].strip()
-                if DEBUG:
-                    with st.sidebar:
-                        st.subheader("Same topic?")
-                        st.markdown(same_topic)
+        # Copy a short-term working memory messages list to use in this one back-and-forth
+        messages = st.session_state.MESSAGES.copy()
 
-                if same_topic.lower() == "false":
-                    st.session_state.SHORT_TERM_CONTEXT = [st.session_state.SHORT_TERM_CONTEXT[-1]]
-                    search_prompt = st.session_state.SHORT_TERM_CONTEXT[0]["content"]
-                else:
-                    # Either topic did not change or could not be determined, assume not changed
-                    search_prompt = history_str.split("###")[1]
-
-            # Perform vector-store lookup of the human prompt
-            docs = vector_db.similarity_search(search_prompt, VECTOR_N_RESULTS)
-
-            if DEBUG:
-                with st.sidebar:
-                    st.subheader("Search prompt")
-                    st.markdown(search_prompt)
-                    st.subheader("Reference materials")
-                    st.json(docs, expanded=False)
-
-            # Build the prompt for the OpenAI ChatGPT API
-            messages = [{"role": "system", "content": INITIAL_PROMPT}]
-            for doc in docs:
-                processed_contents = doc.page_content
-                if "source" in doc.metadata:
-                    processed_contents += f"\n\nSource: {doc.metadata['source'].rstrip('/')}"
-                elif "url" in doc.metadata:
-                    processed_contents += f"\n\nSource: {doc.metadata['url'].rstrip('/')}"
-                if "page" in doc.metadata:
-                    processed_contents += f" (page {doc.metadata['page']})"
-                messages.append({"role": "system", "content": processed_contents})
-
-            # Add in the existing short term chat history (including the latest human question) to the end of the prompt.
-            messages.extend(st.session_state.SHORT_TERM_CONTEXT)
-
-            if DEBUG:
-                with st.sidebar:
-                    st.subheader("Query")
-                    st.json(messages, expanded=False)
-
-            # Call the OpenAI ChatGPT API for final result
-            reply_text = ""
-            async for chunk in await openai.ChatCompletion.acreate(
-                model=NLP_MODEL_NAME,
-                engine=NLP_MODEL_NAME if api_type == "azure" else None,
+        # Step 2: Let the model generate a reply or call any functions to help it until it's ready
+        while True:
+            # Before calling the actual API, for each round in step 2 we still need to track if the memory needs to be shortened
+            summary_res, summary_message, summary_data = await generate_prompt_from_memory_async(
                 messages=messages,
+                model_name="gpt-35-turbo-16k",    # Always use gpt-3.5-turbo-16k for summarization for cost and speed reasons
+                max_tokens=NLP_MODEL_MAX_TOKENS,
+                functions_tokens=NLP_MODEL_FUNCTIONS_TOKENS,
+                reply_max_tokens=NLP_MODEL_REPLY_MAX_TOKENS
+            )
+
+            if summary_res != 0:
+                return summary_res, summary_message
+            
+            messages = summary_data["messages"]
+
+            reply_status, reply_message, reply_data = await get_model_reply_async(
+                messages=messages,
+                model_name=NLP_MODEL_NAME,
                 max_tokens=NLP_MODEL_REPLY_MAX_TOKENS,
                 temperature=0,
-                stream=True,
-                timeout=TIMEOUT,
-            ):
-                content = chunk["choices"][0].get("delta", {}).get("content", None)
-                if content is not None:
-                    reply_text += content
+                custom_init_prompt=INITIAL_PROMPT,
+                function_call="auto",
+                functions=FUNCTIONS,
+                streaming=True,
+                container=reply_box,
+            )
+            if reply_status != 0:
+                return reply_status, reply_message
+            if "DEBUG" in st.session_state and st.session_state.DEBUG:
+                with st.sidebar:
+                    st.write("reply_data")
+                    st.json(reply_data, expanded=False)
 
-                    # Continuously render the reply as it comes in
-                    with reply_box:
-                        get_chat_message(-1, {
-                            "role": "assistant",
-                            "content": reply_text
-                        }, streaming=True)
+            # Check if the first item in the output messages is an actual assistant message, if so then break the loop
+            if reply_data["messages"][0]["role"] == "assistant":
+                break
 
-            # Final fixing
-
-            # Sanitizing output
-            reply_text = reply_text.strip()
-            if reply_text.startswith("AI: "):
-                reply_text = reply_text.split("AI: ", 1)[1]
-
-            reply_message = {"role": "assistant", "content": reply_text}
-            st.session_state.MESSAGES.append(reply_message)
-            st.session_state.SHORT_TERM_CONTEXT.append(reply_message)
+            # If role is function, and the message begins with "IMAGE_URL: " string, we convert it to an assistant reply.
+            if reply_data["messages"][0]["role"] == "function" and reply_data["messages"][0]["content"].startswith("IMAGE_URL: "):
+                # There might be multiple messages in the messages list that are images, go through and collect all into a single message, separated by newlines
+                image_markdowns = []
+                for message in reply_data["messages"]:
+                    if message["content"].startswith("IMAGE_URL: "):
+                        image_markdowns.append(message["content"].split("IMAGE_URL: ", 1)[1])
+                reply_data["messages"] = [{"role": "assistant", "content": "\n\n".join(image_markdowns)}]
+                break
+                
+            # Otherwise, append all output messages to the short-term working memory and continue (but to save some context, we can erase any previously returned function call messages)
+            messages = [message for message in messages if message["role"] != "function"]
+            messages += reply_data["messages"]
 
     except:
-        res_status = 2
-        res_message = traceback.format_exc()
+        return 2, traceback.format_exc()
+
+    # Update message history
+    st.session_state.MESSAGES += reply_data["messages"]
 
     return res_status, res_message
 
@@ -417,7 +438,6 @@ if DEBUG:
 
 if "MESSAGES" not in st.session_state:
     st.session_state.MESSAGES = []
-    st.session_state.SHORT_TERM_CONTEXT = []
 
 # Render chat history so far
 with chat_box:
@@ -427,7 +447,7 @@ with chat_box:
 # Define an input box for human prompts
 with prompt_box:
     with st.form(key="Text input", clear_on_submit=True):
-        human_prompt = st.text_input(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.MESSAGES)}")
+        human_prompt = st.text_area(USER_PROMPT, value="", placeholder=USER_PROMPT, label_visibility="collapsed", key=f"text_input_{len(st.session_state.MESSAGES)}", height=100)
         submitted = st.form_submit_button(label="Send")
 
 # Gate the subsequent chatbot response to only when the user has entered a prompt
