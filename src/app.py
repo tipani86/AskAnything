@@ -160,6 +160,153 @@ st.set_page_config(
 
 ### OTHER FUNCTION DEFINITIONS ###
 
+async def get_model_reply_async(
+    messages: list,
+    model_name: str,
+    max_tokens: int,
+    streaming: bool = False,
+    temperature: float = 0.0,
+    custom_init_prompt: str | None = None,
+    container: Any | None = None,   # Should be an st.empty() object if streaming is True
+    function_call: str | dict[str, Any] = "none",
+    functions: dict[str, Any] | None = None,
+) -> tuple[int, str, dict[str, Any] | None]:
+    res_status = 0
+    res_message = "Success"
+    res_data = None
+
+    if functions is None:
+        functions = {"available_funs": [], "api_in": [{"name": "_default", "parameters": {"type": "object", "properties": {}}}]}
+
+    try:
+        # If custom_init_prompt is provided, use it as the initial prompt
+        if custom_init_prompt is not None:
+            if messages[0]["role"] == "system":
+                messages[0]["content"] = custom_init_prompt
+            else:
+                # Put a new message before others
+                messages.insert(0, {"role": "system", "content": custom_init_prompt})
+
+        if "DEBUG" in st.session_state and st.session_state.DEBUG:
+            with st.sidebar:
+                st.write("Input messages")
+                st.json(messages, expanded=False)
+        
+        if not streaming:
+            response = await openai.ChatCompletion.acreate(
+                model=model_name,
+                deployment_id=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                timeout=TIMEOUT,
+                function_call=function_call,
+                functions=functions["api_in"],
+            )
+            first_choice_message = response["choices"][0]["message"]
+            if first_choice_message["content"] is not None:
+                reply_text = first_choice_message["content"].strip()
+                function_call = None
+            else:
+                reply_text = ""
+                function_call = first_choice_message["function_call"]
+        else:
+            # For streaming, we need to loop through the response generator
+            reply_text = ""
+            function_name = ""
+            function_args = ""
+            async for chunk in await openai.ChatCompletion.acreate(
+                model=model_name,
+                deployment_id=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                stream=True,
+                temperature=temperature,
+                timeout=TIMEOUT,
+                function_call=function_call,
+                functions=functions["api_in"],
+            ):
+                try:
+                    delta = chunk["choices"][0].get("delta", {})
+                except: # Known bug in Azure OpenAI API where the first streamed chunk is empty
+                    continue
+                content = delta.get("content", None)
+                function_call = delta.get("function_call", None)
+                if function_call is not None:
+                    function_name += function_call.get("name", "")
+                    function_args += function_call.get("arguments", "")
+                if content is not None:
+                    reply_text += content
+
+                    # Sanitize output
+                    if reply_text.startswith("AI: "):
+                        reply_text = reply_text.split("AI: ", 1)[1]
+
+                    message = {"role": "assistant", "content": reply_text}
+
+                    # Continuously write the response in Streamlit, if container is provided (here the container should be an st.empty() object)
+                    if container is not None:
+                        with container:
+                            get_chat_message(-1, message, streaming=True)
+
+            # Collect full function call
+            if function_name != "" and function_args != "":
+                function_call = {"name": function_name, "arguments": function_args}
+            else:
+                function_call = None
+
+        # Process final output
+
+        # Check whether the model wants to call a function and call it, if appropriate
+        if function_call is not None:
+
+            if "DEBUG" in st.session_state and st.session_state.DEBUG:
+                with st.sidebar:
+                    st.write("Function call response")
+                    st.json(function_call, expanded=False)
+
+            # Read the function call from model response and execute it (if appropriate)
+            available_funs = functions["available_funs"]
+            fun_name = function_call.get("name", None)
+            if fun_name is not None and fun_name and fun_name in available_funs:
+                function = available_funs[fun_name]
+            else:
+                function = None
+            fun_args = function_call.get("arguments", None)
+            if fun_args is not None and isinstance(fun_args, str):
+                fun_args = json.loads(fun_args)
+            if function is not None:
+                with st.status(f"Called function `{fun_name}`"):
+                    st.json(fun_args, expanded=True)
+                    fun_res = function(fun_args)
+            else:
+                fun_res = ["Error, no function specified"]
+
+            out_messages = [{"role": "function", "name": fun_name, "content": one_fun_res} for one_fun_res in fun_res]
+
+        else:   # Not a function call, return normal message
+
+            # Sanitize
+            if reply_text.startswith("AI: "):
+                reply_text = reply_text.split("AI: ", 1)[1]
+
+            out_messages = [{"role": "assistant", "content": reply_text}]
+
+            # Write the response to Streamlit if container is provided
+            if container is not None:
+                with container:
+                    get_chat_message(-1, out_messages[0])
+
+        res_data = {
+            "messages": out_messages,
+            "function_call": function_call,
+        }
+    except:
+        return 2, traceback.format_exc(), None
+
+    return res_status, res_message, res_data
+
+
 def get_chat_message(
     i: int,
     message: dict[str, str],
