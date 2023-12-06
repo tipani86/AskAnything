@@ -160,6 +160,67 @@ st.set_page_config(
 
 ### OTHER FUNCTION DEFINITIONS ###
 
+def get_chat_message(
+    i: int,
+    message: dict[str, str],
+    loading: bool = False,
+    loading_fp: Path = FILE_ROOT / "assets" / "loading.gif",
+    streaming: bool = False,
+) -> None:
+    # Formats the message in an basic chat fashion
+    image_container, contents_container = st.columns([1, 11], gap="small")
+
+    sources = ""
+
+    role = message["role"]
+    contents = message["content"]
+    if role == "assistant":
+        if "SOURCES: " in contents:
+            contents, sources = contents.split("SOURCES: ", 1)
+        file_path = FILE_ROOT / "assets" / ICON_FN
+        src = f"data:image/gif;base64,{get_local_img(file_path)}"
+    elif role == "user":
+        file_path = FILE_ROOT / "assets" / "user_icon.png"
+        image_data = get_local_img(file_path)
+        src = f"data:image/gif;base64,{image_data}"       
+    else:
+        # Not a message that needs to be rendered (for example, system message)
+        return
+
+    with image_container:
+        st.markdown(f"<img class='chat-icon' border=0 src='{src}' width=32 height=32>", unsafe_allow_html=True)
+        st.write("")
+
+    with contents_container:
+        st.markdown(contents)
+        if len(sources) > 0:
+            if streaming:
+                pass
+            else:
+                sources = json.loads(sources)
+                try:
+                    urls = []
+                    for source in sources["sources"]:
+                        if "url" not in source:
+                            raise
+                        if source["url"].strip() == "":
+                            raise
+                        urls.append(source["url"])
+                    if len(urls) > 0:
+                        markdown_text = ""
+                        for j, url in enumerate(urls):
+                            markdown_text += f"[[{j+1}]]({url}) "
+                        st.markdown(markdown_text)
+                except:
+                    with st.expander("Sources"):
+                        st.json(sources["sources"], expanded=True)
+        if i >= 0:
+            copy_to_clipboard(f"copy_{i}", contents)
+        if loading:
+            st.markdown(f"<img src='data:image/gif;base64,{get_local_img(loading_fp)}' width=30 height=10>", unsafe_allow_html=True)
+
+
+
 def search_documents(kwargs) -> list[str]:
     """Helper function to search documents in the provided database"""
     query = kwargs.get("query", None)
