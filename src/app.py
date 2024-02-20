@@ -107,8 +107,9 @@ if "site" in query_params:
     args.config = Path("cfg") / f"""{query_params["site"][0].lower()}.cfg"""
 
 if args.config is None:
-    st.error("No site specified!")
-    st.stop()
+    args.config = Path("cfg") / "uk_frs.cfg"
+    # st.error("No site specified!")
+    # st.stop()
 
 # Load the config file
 
