@@ -19,7 +19,7 @@ You can check out the configuration file in `src/cfg/default.cfg`. It currently 
 There are several methods:
 1. Sitemap Ingestion: See `vero.fi.cfg`.
 2. Site Excel (individual pages listed in spreadsheet): See `chunshi.cfg`.
-3. PDF: See `uk_frs.cfg`.
+3. PDF: See `sony_camera.cfg`.
 There might be some code started on other methods but they are not mature yet.
 
 ### Run data ingestion with a sample site (vero.fi)
