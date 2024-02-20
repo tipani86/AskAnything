@@ -96,15 +96,15 @@ def get_vector_db(file_path: Path) -> Chroma:
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
 # Get query parameters
-query_params = st.query_params()
-if "debug" in query_params and query_params["debug"][0].lower() == "true":
+query_params = st.query_params
+if "debug" in query_params and query_params["debug"].lower() == "true":
     st.session_state.DEBUG = True
 
 if "DEBUG" in st.session_state and st.session_state.DEBUG:
     DEBUG = True
 
 if "site" in query_params:
-    args.config = Path("cfg") / f"""{query_params["site"][0].lower()}.cfg"""
+    args.config = Path("cfg") / f"""{query_params["site"].lower()}.cfg"""
 
 if args.config is None:
     args.config = Path("cfg") / "uk_frs.cfg"
