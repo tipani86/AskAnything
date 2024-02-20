@@ -96,7 +96,7 @@ def get_vector_db(file_path: Path) -> Chroma:
     return Chroma(persist_directory=str(file_path), embedding_function=embeddings)
 
 # Get query parameters
-query_params = st.experimental_get_query_params()
+query_params = st.query_params()
 if "debug" in query_params and query_params["debug"][0].lower() == "true":
     st.session_state.DEBUG = True
 
