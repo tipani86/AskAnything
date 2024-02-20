@@ -11,7 +11,7 @@ BACKOFF = 1.5
 
 # Settings for OpenAI NLP models. Here, NLP tokens are not to be confused with user chat or image generation tokens
 
-NLP_MODEL_NAME = "gpt-4"
+NLP_MODEL_NAME = "gpt-4-turbo"
 NLP_MODEL_MAX_TOKENS = 16000
 NLP_MODEL_FUNCTIONS_TOKENS = 1000
 NLP_MODEL_REPLY_MAX_TOKENS = 2000
