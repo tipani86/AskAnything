@@ -11,10 +11,10 @@ COPY requirements.txt /app/
 
 RUN <<EOF
 set -e
-# apt-get update
-# apt-get install -y --no-install-recommends build-essential
-# rm -rf /var/lib/apt/lists/*
-# apt-get clean
+apt-get update
+apt-get install -y --no-install-recommends build-essential
+rm -rf /var/lib/apt/lists/*
+apt-get clean
 python3 -m pip install --no-cache-dir -r /app/requirements.txt
 python3 -m pip cache purge
 EOF
