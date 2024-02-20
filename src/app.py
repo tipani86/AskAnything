@@ -3,7 +3,6 @@ import os
 import time
 import json
 import openai
-import base64
 import tarfile
 import asyncio
 import argparse
@@ -12,6 +11,7 @@ import traceback
 import configparser
 from utils import *
 from PIL import Image
+from typing import Any
 import streamlit as st
 from pathlib import Path
 from app_config import *

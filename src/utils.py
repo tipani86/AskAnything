@@ -1,13 +1,8 @@
-import json
 import base64
-import openai
 import tiktoken
-import traceback
 import streamlit as st
-from typing import Any
 from pathlib import Path
 from app_config import *
-from app import get_chat_message
 import streamlit.components.v1 as components
 
 FILE_ROOT = Path(__file__).parent.resolve()
